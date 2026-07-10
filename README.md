@@ -1,21 +1,22 @@
 # TaskCooker
 
-**Stop babysitting terminals. Start shipping tasks.**
+I was running 20 to 40 terminal tabs across different worktrees. Burned out, anxious, staring blankly at the screen trying to remember where I was with each task.
 
-Line up the tasks. Nuke them all. Serve the masterpiece.
+There had to be a better way to get things done in the agentic world.
 
-TaskCooker is a free, open-source desktop app for delegating work to AI agents: coding, research, writing, anything you can shape into a task. You manage tasks, subtasks, and projects with their own contexts. TaskCooker manages the agents, directories, and worktrees.
+Somethng where we focus on what matters, the task, instead of prompts.
 
-Visit the website over at taskcooker.mc-lopez.com to know more.
+TaskCooker is that better way.  It’s free, it’s open source, and it runs on any AI subscription you already have, like Claude Code.
+
+---
+
+Visit the website over at https://taskcooker.mc-lopez.com to know more.
+
+---
 
 Built with TypeScript, React, Rust, and Tauri. Local-first: your tasks and your code stay on your machine. Works with the AI subscriptions you already pay for, like Claude Code and Codex.
 
 Feature Discussions and Support go in [https://www.reddit.com/r/taskcooker/](https://www.reddit.com/r/taskcooker/).
-
-## Why
-
-> "I was running 20 to 40 terminal tabs across different worktrees. Burned out, anxious, staring blankly at the screen trying to remember where I was with each task. There had to be a better way to get things done in the agentic world."
-
 
 ## Development
 
