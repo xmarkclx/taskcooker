@@ -1,0 +1,16 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Permissions for Boomerang's normal task windows.",
+  "windows": ["main", "project-*", "task-*", "terminal-*", "image-*"],
+  "permissions": [
+    "core:default",
+    "core:window:allow-close",
+    "core:window:allow-minimize",
+    "core:window:allow-set-focus",
+    "core:window:allow-start-dragging",
+    "core:window:allow-toggle-maximize",
+    "core:webview:allow-create-webview-window",
+    "opener:default"
+  ]
+}

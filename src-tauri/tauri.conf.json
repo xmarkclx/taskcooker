@@ -1,0 +1,50 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "TaskCooker Dev",
+  "version": "0.1.0",
+  "identifier": "com.marklopez.boomerangtasks.dev",
+  "build": {
+    "beforeDevCommand": "node scripts/ensure-dev-server.mjs",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "macOSPrivateApi": true,
+    "windows": [
+      {
+        "create": false,
+        "title": "TaskCooker",
+        "width": 1440,
+        "height": 900,
+        "minWidth": 960,
+        "minHeight": 640,
+        "decorations": false,
+        "shadow": true,
+        "transparent": true,
+        "backgroundColor": "#00000000"
+      }
+    ],
+    "security": {
+      "assetProtocol": {
+        "enable": true,
+        "scope": {
+          "allow": ["**/*"],
+          "requireLiteralLeadingDot": false
+        }
+      },
+      "csp": "default-src 'self' ipc: http://ipc.localhost; connect-src 'self' ipc: http://ipc.localhost http://127.0.0.1:* http://localhost:* ws://127.0.0.1:* ws://localhost:*; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self' blob:; img-src 'self' asset: http://asset.localhost http: https: data: blob:; font-src 'self' data:; style-src 'self' 'unsafe-inline'; frame-src 'self'; child-src 'self' blob:"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ]
+  }
+}

@@ -1,0 +1,39 @@
+[package]
+name = "boomerang-tasks"
+version = "0.1.0"
+description = "TaskCooker desktop app"
+authors = ["Mark Lopez"]
+edition = "2021"
+default-run = "boomerang-tasks"
+
+[lib]
+name = "boomerang_tasks_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+# Headless host for thin-client / WSL integration (B-171). Reuses the library's
+# core + command helpers; see src/server.rs.
+[[bin]]
+name = "taskcooker-server"
+path = "src/bin/taskcooker-server.rs"
+
+[build-dependencies]
+serde_json = "1.0.150"
+tauri-build = { version = "2.6.3", features = [] }
+
+[dependencies]
+base64 = "0.22.1"
+chrono = { version = "0.4.45", features = ["serde"] }
+libc = "0.2"
+notify = "8.0"
+notify-rust = "4.18.0"
+portable-pty = "0.9.0"
+rusqlite = { version = "0.40.1", features = ["bundled", "chrono", "serde_json"] }
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.150"
+tauri = { version = "2.11.3", features = ["protocol-asset", "macos-private-api"] }
+tauri-plugin-dialog = "2.7.1"
+tauri-plugin-opener = "2.5.4"
+uuid = { version = "1.23.3", features = ["v4", "serde"] }
+
+[dev-dependencies]
+tempfile = "3.27.0"
