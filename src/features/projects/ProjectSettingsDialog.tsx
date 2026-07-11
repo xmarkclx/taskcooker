@@ -16,6 +16,7 @@ import type {
   ProjectActionSummary,
   ProjectSummary,
 } from '../../domain/domain';
+import { isWindowsPlatform } from '../../tauri/platform';
 import { AppButton } from '../../ui/Button';
 import { DialogBackdrop, DialogPanel } from '../../ui/Dialog';
 import { AppSegmentedControl } from '../../ui/SegmentedControl';
@@ -127,7 +128,7 @@ export function ProjectSettingsDialog({
       onSubmit(next);
     },
   });
-  const showWslTerminalSetting = isWindowsRuntime();
+  const showWslTerminalSetting = isWindowsPlatform();
 
   return (
     <DialogBackdrop>
@@ -561,15 +562,6 @@ function GitConfigPanel({
       </section>
     </div>
   );
-}
-
-function isWindowsRuntime() {
-  const platform =
-    (navigator as { userAgentData?: { platform?: string } }).userAgentData
-      ?.platform ??
-    navigator.platform ??
-    '';
-  return /win/i.test(platform) || /windows/i.test(navigator.userAgent);
 }
 
 function ConnectGitHubDialog({

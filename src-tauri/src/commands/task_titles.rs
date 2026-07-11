@@ -383,6 +383,7 @@ mod tests {
                 working_directory: "/tmp/boomerang".to_string(),
                 display_id_prefix: "B".to_string(),
                 actions_directory: "actions".to_string(),
+                terminal_wsl_enabled: false,
                 parent_project_id: None,
                 inherit_parent: false,
             })
@@ -428,6 +429,7 @@ mod tests {
                 working_directory: "/tmp/boomerang".to_string(),
                 display_id_prefix: "B".to_string(),
                 actions_directory: "actions".to_string(),
+                terminal_wsl_enabled: false,
                 parent_project_id: None,
                 inherit_parent: false,
             })

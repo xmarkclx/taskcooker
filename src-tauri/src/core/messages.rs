@@ -53,6 +53,7 @@ mod tests {
             working_directory: "/tmp/messages-project".to_string(),
             display_id_prefix: "M".to_string(),
             actions_directory: "actions".to_string(),
+            terminal_wsl_enabled: false,
             parent_project_id: None,
             inherit_parent: false,
         })

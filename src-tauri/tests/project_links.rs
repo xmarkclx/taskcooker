@@ -6,6 +6,7 @@ fn seed_named_project(db: &AppDb, name: &str, prefix: &str) -> Project {
         working_directory: format!("/tmp/{name}"),
         display_id_prefix: prefix.to_string(),
         actions_directory: "actions".to_string(),
+        terminal_wsl_enabled: false,
         parent_project_id: None,
         inherit_parent: false,
     })
@@ -18,6 +19,7 @@ fn seed_project(db: &AppDb) -> Project {
         working_directory: "/tmp/journal-project".to_string(),
         display_id_prefix: "J".to_string(),
         actions_directory: "actions".to_string(),
+        terminal_wsl_enabled: false,
         parent_project_id: None,
         inherit_parent: false,
     })
@@ -47,6 +49,7 @@ fn subproject_input(parent_id: i64, name: &str, prefix: &str) -> NewProject {
         working_directory: String::new(),
         display_id_prefix: prefix.to_string(),
         actions_directory: "actions".to_string(),
+        terminal_wsl_enabled: false,
         parent_project_id: Some(parent_id),
         inherit_parent: true,
     }
@@ -156,6 +159,7 @@ fn create_project_rejects_inherit_without_parent() {
             working_directory: String::new(),
             display_id_prefix: "O".to_string(),
             actions_directory: "actions".to_string(),
+            terminal_wsl_enabled: false,
             parent_project_id: None,
             inherit_parent: true,
         })
@@ -172,6 +176,7 @@ fn create_project_rejects_missing_parent() {
             working_directory: String::new(),
             display_id_prefix: "O".to_string(),
             actions_directory: "actions".to_string(),
+            terminal_wsl_enabled: false,
             parent_project_id: Some(9999),
             inherit_parent: true,
         })

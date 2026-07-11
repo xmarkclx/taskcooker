@@ -17,6 +17,7 @@ fn project_fixture(db: &AppDb, name: &str, working_directory: &str, prefix: &str
         working_directory: working_directory.to_string(),
         display_id_prefix: prefix.to_string(),
         actions_directory: ".boomerang/actions".to_string(),
+        terminal_wsl_enabled: false,
         parent_project_id: None,
         inherit_parent: false,
     })

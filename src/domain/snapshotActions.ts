@@ -27,6 +27,7 @@ export type LocalCreateProjectInput = {
   name: string;
   workingDirectory: string;
   displayIdPrefix: string;
+  terminalWslEnabled?: boolean;
   parentProjectId?: number;
   inheritParent?: boolean;
 };
@@ -659,7 +660,7 @@ export function createProjectLocally(
     notesMarkdown: '',
     projectFolderOpenApp: 'cursor',
     mainBranch: 'main',
-    terminalWslEnabled: false,
+    terminalWslEnabled: input.terminalWslEnabled ?? false,
     backgroundImagePath: '',
     workingDirectory,
   };

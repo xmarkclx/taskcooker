@@ -1,4 +1,5 @@
 use std::fs;
+use std::path::PathBuf;
 use std::process::Command;
 
 use boomerang_tasks_lib::core::{
@@ -20,6 +21,7 @@ fn project_fixture(db: &AppDb) -> i64 {
         working_directory: "/tmp/tmatrix".to_string(),
         display_id_prefix: "T".to_string(),
         actions_directory: ".boomerang/actions".to_string(),
+        terminal_wsl_enabled: false,
         parent_project_id: None,
         inherit_parent: false,
     })
@@ -53,6 +55,7 @@ fn git_project_fixture(db: &AppDb) -> (tempfile::TempDir, i64) {
             working_directory: project_dir.to_string_lossy().to_string(),
             display_id_prefix: "T".to_string(),
             actions_directory: ".boomerang/actions".to_string(),
+            terminal_wsl_enabled: false,
             parent_project_id: None,
             inherit_parent: false,
         })
@@ -570,10 +573,11 @@ fn todo_artifacts_are_stored_as_app_data_markdown_and_surfaced_in_snapshots() {
         updated.artifact_markdown,
         "# Handoff\n\n- Chart: ~/charts/progress.png"
     );
-    assert!(updated.artifact_markdown_path.ends_with(&format!(
-        "artifacts/project-{project_id}/{}.md",
-        todo.display_id
-    )));
+    assert!(artifact_path.ends_with(
+        PathBuf::from("artifacts")
+            .join(format!("project-{project_id}"))
+            .join(format!("{}.md", todo.display_id))
+    ));
     assert_eq!(
         fs::read_to_string(artifact_path).unwrap(),
         "# Handoff\n\n- Chart: ~/charts/progress.png"
@@ -704,6 +708,7 @@ fn linked_todo_mounts_under_target_parent_without_moving_source_tree() {
             working_directory: "/tmp/client".to_string(),
             display_id_prefix: "C".to_string(),
             actions_directory: ".boomerang/actions".to_string(),
+            terminal_wsl_enabled: false,
             parent_project_id: None,
             inherit_parent: false,
         })
@@ -804,6 +809,7 @@ fn reorder_moves_root_todo_to_another_project_with_its_subtree() {
             working_directory: "/tmp/life".to_string(),
             display_id_prefix: "LIFE".to_string(),
             actions_directory: ".boomerang/actions".to_string(),
+            terminal_wsl_enabled: false,
             parent_project_id: None,
             inherit_parent: false,
         })
@@ -1195,6 +1201,7 @@ fn app_snapshot_can_select_all_projects() {
             working_directory: "/tmp/life".to_string(),
             display_id_prefix: "LIFE".to_string(),
             actions_directory: ".boomerang/actions".to_string(),
+            terminal_wsl_enabled: false,
             parent_project_id: None,
             inherit_parent: false,
         })
@@ -1222,6 +1229,7 @@ fn project_summaries_sort_recently_used_projects_first() {
             working_directory: "/tmp/life".to_string(),
             display_id_prefix: "LIFE".to_string(),
             actions_directory: ".boomerang/actions".to_string(),
+            terminal_wsl_enabled: false,
             parent_project_id: None,
             inherit_parent: false,
         })
@@ -1978,6 +1986,7 @@ fn project_actions_include_native_open_folder_and_script_metadata() {
             working_directory: temp.path().to_string_lossy().to_string(),
             display_id_prefix: "T".to_string(),
             actions_directory: ".boomerang/actions".to_string(),
+            terminal_wsl_enabled: false,
             parent_project_id: None,
             inherit_parent: false,
         })
@@ -2013,6 +2022,7 @@ fn project_actions_sort_recently_run_actions_first() {
             working_directory: temp.path().to_string_lossy().to_string(),
             display_id_prefix: "T".to_string(),
             actions_directory: ".boomerang/actions".to_string(),
+            terminal_wsl_enabled: false,
             parent_project_id: None,
             inherit_parent: false,
         })
@@ -2053,6 +2063,7 @@ fn project_action_delete_removes_script_files_and_rejects_native_actions() {
             working_directory: temp.path().to_string_lossy().to_string(),
             display_id_prefix: "T".to_string(),
             actions_directory: ".boomerang/actions".to_string(),
+            terminal_wsl_enabled: false,
             parent_project_id: None,
             inherit_parent: false,
         })
@@ -2094,6 +2105,7 @@ fn project_action_creation_rejects_traversal_and_writes_single_files() {
             working_directory: temp.path().to_string_lossy().to_string(),
             display_id_prefix: "T".to_string(),
             actions_directory: ".boomerang/actions".to_string(),
+            terminal_wsl_enabled: false,
             parent_project_id: None,
             inherit_parent: false,
         })
@@ -2129,6 +2141,7 @@ fn script_action_runs_record_running_pty_metadata() {
             working_directory: temp.path().to_string_lossy().to_string(),
             display_id_prefix: "T".to_string(),
             actions_directory: ".boomerang/actions".to_string(),
+            terminal_wsl_enabled: false,
             parent_project_id: None,
             inherit_parent: false,
         })
@@ -2172,6 +2185,7 @@ fn action_runs_with_todo_context_append_a_todo_event() {
             working_directory: temp.path().to_string_lossy().to_string(),
             display_id_prefix: "T".to_string(),
             actions_directory: ".boomerang/actions".to_string(),
+            terminal_wsl_enabled: false,
             parent_project_id: None,
             inherit_parent: false,
         })
@@ -2217,6 +2231,7 @@ fn action_runs_with_todo_context_are_task_execution_terminals() {
             working_directory: temp.path().to_string_lossy().to_string(),
             display_id_prefix: "T".to_string(),
             actions_directory: ".boomerang/actions".to_string(),
+            terminal_wsl_enabled: false,
             parent_project_id: None,
             inherit_parent: false,
         })
@@ -2265,6 +2280,7 @@ fn action_runs_reject_todo_context_from_another_project() {
             working_directory: temp.path().join("tmatrix").to_string_lossy().to_string(),
             display_id_prefix: "T".to_string(),
             actions_directory: ".boomerang/actions".to_string(),
+            terminal_wsl_enabled: false,
             parent_project_id: None,
             inherit_parent: false,
         })
@@ -2275,6 +2291,7 @@ fn action_runs_reject_todo_context_from_another_project() {
             working_directory: temp.path().join("life").to_string_lossy().to_string(),
             display_id_prefix: "LIFE".to_string(),
             actions_directory: ".boomerang/actions".to_string(),
+            terminal_wsl_enabled: false,
             parent_project_id: None,
             inherit_parent: false,
         })
@@ -2318,6 +2335,7 @@ fn action_runs_finish_from_pty_exit_codes() {
             working_directory: temp.path().to_string_lossy().to_string(),
             display_id_prefix: "T".to_string(),
             actions_directory: ".boomerang/actions".to_string(),
+            terminal_wsl_enabled: false,
             parent_project_id: None,
             inherit_parent: false,
         })

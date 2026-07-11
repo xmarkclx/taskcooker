@@ -233,6 +233,7 @@ export type CreateProjectInput = {
   name: string;
   workingDirectory: string;
   displayIdPrefix: string;
+  terminalWslEnabled?: boolean;
   parentProjectId?: number;
   inheritParent?: boolean;
 };

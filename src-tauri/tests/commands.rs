@@ -39,6 +39,7 @@ use boomerang_tasks_lib::core::{
 };
 use serde_json::json;
 use std::fs;
+use std::path::PathBuf;
 use std::process::Command;
 
 const DEFAULT_MARKDOWN_EDITOR_FONT_FAMILY: &str = "sans-serif";
@@ -69,6 +70,7 @@ fn create_git_project(db: &AppDb) -> (tempfile::TempDir, i64) {
             working_directory: project_dir.to_string_lossy().to_string(),
             display_id_prefix: "T".to_string(),
             actions_directory: ".boomerang/actions".to_string(),
+            terminal_wsl_enabled: false,
             parent_project_id: None,
             inherit_parent: false,
         })
@@ -143,8 +145,11 @@ fn update_state_command_helper_writes_and_returns_fresh_snapshot() {
 
 #[test]
 fn open_file_path_validation_accepts_absolute_and_home_aliased_paths_only() {
+    let absolute_path = std::env::current_dir()
+        .expect("current directory is available")
+        .join("REQUIREMENTS.md");
     let absolute = resolve_openable_file_path(OpenFilePathCommand {
-        path: "/Users/markcl/p/screenshot-alt/REQUIREMENTS.md".to_string(),
+        path: absolute_path.display().to_string(),
     })
     .unwrap();
     assert!(absolute.is_absolute());
@@ -375,6 +380,7 @@ fn timer_command_helpers_start_and_stop_the_global_timer() {
             working_directory: "/tmp/tmatrix".to_string(),
             display_id_prefix: "T".to_string(),
             actions_directory: ".boomerang/actions".to_string(),
+            terminal_wsl_enabled: false,
             parent_project_id: None,
             inherit_parent: false,
         })
@@ -401,6 +407,7 @@ fn create_todo_command_helper_allocates_and_selects_the_new_todo() {
             working_directory: "/tmp/tmatrix".to_string(),
             display_id_prefix: "T".to_string(),
             actions_directory: ".boomerang/actions".to_string(),
+            terminal_wsl_enabled: false,
             parent_project_id: None,
             inherit_parent: false,
         })
@@ -438,6 +445,7 @@ fn reorder_todo_command_helper_returns_reordered_snapshot() {
             working_directory: "/tmp/tmatrix".to_string(),
             display_id_prefix: "T".to_string(),
             actions_directory: ".boomerang/actions".to_string(),
+            terminal_wsl_enabled: false,
             parent_project_id: None,
             inherit_parent: false,
         })
@@ -481,6 +489,7 @@ fn reorder_todo_command_helper_moves_todo_to_target_project() {
             working_directory: "/tmp/tmatrix".to_string(),
             display_id_prefix: "T".to_string(),
             actions_directory: ".boomerang/actions".to_string(),
+            terminal_wsl_enabled: false,
             parent_project_id: None,
             inherit_parent: false,
         })
@@ -491,6 +500,7 @@ fn reorder_todo_command_helper_moves_todo_to_target_project() {
             working_directory: "/tmp/life".to_string(),
             display_id_prefix: "LIFE".to_string(),
             actions_directory: ".boomerang/actions".to_string(),
+            terminal_wsl_enabled: false,
             parent_project_id: None,
             inherit_parent: false,
         })
@@ -529,6 +539,7 @@ fn reorder_project_link_command_helper_returns_parent_snapshot_in_new_order() {
             working_directory: "/tmp/parent".to_string(),
             display_id_prefix: "P".to_string(),
             actions_directory: ".boomerang/actions".to_string(),
+            terminal_wsl_enabled: false,
             parent_project_id: None,
             inherit_parent: false,
         })
@@ -539,6 +550,7 @@ fn reorder_project_link_command_helper_returns_parent_snapshot_in_new_order() {
             working_directory: "/tmp/first".to_string(),
             display_id_prefix: "F".to_string(),
             actions_directory: ".boomerang/actions".to_string(),
+            terminal_wsl_enabled: false,
             parent_project_id: None,
             inherit_parent: false,
         })
@@ -549,6 +561,7 @@ fn reorder_project_link_command_helper_returns_parent_snapshot_in_new_order() {
             working_directory: "/tmp/second".to_string(),
             display_id_prefix: "S".to_string(),
             actions_directory: ".boomerang/actions".to_string(),
+            terminal_wsl_enabled: false,
             parent_project_id: None,
             inherit_parent: false,
         })
@@ -590,6 +603,7 @@ fn delete_todo_command_helper_removes_todo_attachment_directory() {
             working_directory: temp.path().to_string_lossy().to_string(),
             display_id_prefix: "T".to_string(),
             actions_directory: ".boomerang/actions".to_string(),
+            terminal_wsl_enabled: false,
             parent_project_id: None,
             inherit_parent: false,
         })
@@ -624,6 +638,7 @@ fn delete_todos_command_helper_removes_multiple_todos_and_attachment_directories
             working_directory: temp.path().to_string_lossy().to_string(),
             display_id_prefix: "T".to_string(),
             actions_directory: ".boomerang/actions".to_string(),
+            terminal_wsl_enabled: false,
             parent_project_id: None,
             inherit_parent: false,
         })
@@ -671,6 +686,7 @@ fn update_todos_state_command_helper_updates_each_selected_todo() {
             working_directory: "/tmp/tmatrix".to_string(),
             display_id_prefix: "T".to_string(),
             actions_directory: ".boomerang/actions".to_string(),
+            terminal_wsl_enabled: false,
             parent_project_id: None,
             inherit_parent: false,
         })
@@ -720,6 +736,7 @@ fn create_project_command_helper_creates_and_selects_an_empty_project() {
             name: "New Workspace".to_string(),
             working_directory: "~/p/new-workspace".to_string(),
             display_id_prefix: "NW".to_string(),
+            terminal_wsl_enabled: true,
             parent_project_id: None,
             inherit_parent: false,
         },
@@ -737,6 +754,7 @@ fn create_project_command_helper_creates_and_selects_an_empty_project() {
     assert_eq!(project.working_directory, "~/p/new-workspace");
     assert_eq!(project.display_id_prefix, "NW");
     assert_eq!(project.actions_directory, "actions");
+    assert!(project.terminal_wsl_enabled);
 }
 
 #[test]
@@ -818,9 +836,15 @@ fn project_background_image_helper_copies_image_into_app_data() {
         set_project_background_image_from_path_in_db(&db, &app_data_dir, project_id, &source)
             .unwrap();
     let copied = &snapshot.projects[0].background_image_path;
+    let copied_path = PathBuf::from(copied.as_str());
 
-    assert!(copied.starts_with(&app_data_dir.display().to_string()));
-    assert!(copied.contains(&format!("/attachments/project-{project_id}/background/")));
+    assert!(copied_path.starts_with(&app_data_dir));
+    assert!(copied_path.starts_with(
+        app_data_dir
+            .join("attachments")
+            .join(format!("project-{project_id}"))
+            .join("background")
+    ));
     assert_ne!(copied.as_str(), source.to_string_lossy().as_ref());
     assert_eq!(
         fs::read(copied).expect("copied image exists"),
@@ -860,6 +884,7 @@ fn project_action_command_helpers_list_create_and_record_runs() {
             working_directory: temp.path().to_string_lossy().to_string(),
             display_id_prefix: "T".to_string(),
             actions_directory: ".boomerang/actions".to_string(),
+            terminal_wsl_enabled: false,
             parent_project_id: None,
             inherit_parent: false,
         })
@@ -990,9 +1015,9 @@ fn worktree_diff_and_merge_process_commands_use_the_project_main_branch() {
 
 #[test]
 fn worktree_process_commands_expand_home_aliases_for_git_paths() {
-    let home = std::env::var("HOME").expect("HOME is set for path expansion tests");
-    let project_dir = format!("{home}/p/tmatrix");
-    let worktree_dir = format!("{home}/p/tmatrix-T-1");
+    let home = PathBuf::from(std::env::var("HOME").expect("HOME is set for path expansion tests"));
+    let project_dir = home.join("p/tmatrix").display().to_string();
+    let worktree_dir = home.join("p/tmatrix-T-1").display().to_string();
     let diff = build_worktree_diff_process_command("~/p/tmatrix-T-1", "main").unwrap();
     let merge = build_worktree_merge_process_command(
         "~/p/tmatrix",
@@ -1004,16 +1029,13 @@ fn worktree_process_commands_expand_home_aliases_for_git_paths() {
     .unwrap();
 
     assert_eq!(diff.cwd, worktree_dir);
-    assert!(diff
-        .display
-        .contains(&format!("git -C {worktree_dir} diff main..HEAD")));
+    assert!(diff.display.contains(&worktree_dir));
+    assert!(diff.display.contains("diff main..HEAD"));
     assert_eq!(merge.cwd, project_dir);
-    assert!(merge
-        .display
-        .contains(&format!("git -C {worktree_dir} add -A")));
-    assert!(merge
-        .display
-        .contains(&format!("git -C {project_dir} checkout main")));
+    assert!(merge.display.contains(&worktree_dir));
+    assert!(merge.display.contains("add -A"));
+    assert!(merge.display.contains(&project_dir));
+    assert!(merge.display.contains("checkout main"));
     assert!(!merge.display.contains("git -C ~/"));
 }
 
@@ -1055,6 +1077,7 @@ fn project_actions_directory_command_helpers_resolve_and_create_directory() {
             working_directory: temp.path().to_string_lossy().to_string(),
             display_id_prefix: "T".to_string(),
             actions_directory: ".boomerang/actions".to_string(),
+            terminal_wsl_enabled: false,
             parent_project_id: None,
             inherit_parent: false,
         })
@@ -1094,6 +1117,7 @@ fn create_project_rejects_duplicate_display_id_prefixes() {
         working_directory: "~/p/tmatrix".to_string(),
         display_id_prefix: "T".to_string(),
         actions_directory: ".boomerang/actions".to_string(),
+        terminal_wsl_enabled: false,
         parent_project_id: None,
         inherit_parent: false,
     })
@@ -1105,6 +1129,7 @@ fn create_project_rejects_duplicate_display_id_prefixes() {
             name: "tools".to_string(),
             working_directory: "~/p/tools".to_string(),
             display_id_prefix: "t".to_string(),
+            terminal_wsl_enabled: false,
             parent_project_id: None,
             inherit_parent: false,
         },

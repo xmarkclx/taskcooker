@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type React from 'react';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { ProjectSummary } from '../../domain/domain';
 import { NewProjectDialog } from './NewProjectDialog';
@@ -13,6 +13,10 @@ const appStyles = readFileSync(
 );
 
 describe('NewProjectDialog', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it('generates a unique task prefix from the project name', async () => {
     render(
       <NewProjectDialog
@@ -174,6 +178,77 @@ describe('NewProjectDialog', () => {
     const directoryField = screen.getByLabelText('Project working directory').closest('label');
     expect(directoryField).toHaveClass('new-project-directory-field');
     expect(cssRule('.new-project-directory-field')).toContain('grid-column: 1 / -1');
+  });
+
+  it('shows and submits the WSL terminal option on Windows', async () => {
+    vi.spyOn(window.navigator, 'platform', 'get').mockReturnValue('Win32');
+    const onSubmit = vi.fn();
+
+    render(
+      <NewProjectDialog
+        existingProjects={existingProjects}
+        onClose={() => undefined}
+        onCreateWorkingDirectory={vi.fn()}
+        onSubmit={onSubmit}
+        onWorkingDirectoryStatus={vi.fn().mockResolvedValue({
+          exists: true,
+          path: '/Users/markcl/p/alpha-api',
+        })}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText('Project name'), {
+      target: { value: 'Alpha API' },
+    });
+    fireEvent.click(screen.getByLabelText('Run terminals in WSL'));
+
+    await waitFor(() => {
+      expect(screen.getByText('Working directory ready')).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Create Project' }));
+
+    await waitFor(() => {
+      expect(onSubmit).toHaveBeenCalledWith(
+        expect.objectContaining({ terminalWslEnabled: true }),
+      );
+    });
+  });
+
+  it('hides the WSL terminal option off Windows and submits false', async () => {
+    vi.spyOn(window.navigator, 'platform', 'get').mockReturnValue('MacIntel');
+    const onSubmit = vi.fn();
+
+    render(
+      <NewProjectDialog
+        existingProjects={existingProjects}
+        onClose={() => undefined}
+        onCreateWorkingDirectory={vi.fn()}
+        onSubmit={onSubmit}
+        onWorkingDirectoryStatus={vi.fn().mockResolvedValue({
+          exists: true,
+          path: '/Users/markcl/p/alpha-api',
+        })}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText('Project name'), {
+      target: { value: 'Alpha API' },
+    });
+
+    expect(screen.queryByLabelText('Run terminals in WSL')).not.toBeInTheDocument();
+
+    await waitFor(() => {
+      expect(screen.getByText('Working directory ready')).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Create Project' }));
+
+    await waitFor(() => {
+      expect(onSubmit).toHaveBeenCalledWith(
+        expect.objectContaining({ terminalWslEnabled: false }),
+      );
+    });
   });
 });
 

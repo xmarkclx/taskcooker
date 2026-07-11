@@ -26,16 +26,19 @@ impl AppDb {
         }
 
         let inherit_parent_int = if input.inherit_parent { 1 } else { 0 };
+        let terminal_wsl_enabled_int = if input.terminal_wsl_enabled { 1 } else { 0 };
         tx.execute(
             "INSERT INTO projects
                 (name, working_directory, display_id_prefix, actions_directory,
-                 project_folder_open_app, created_at, updated_at, last_used_at, status, inherit_parent)
-             VALUES (?1, ?2, ?3, ?4, 'cursor', ?5, ?5, ?5, 'Active', ?6)",
+                 project_folder_open_app, terminal_wsl_enabled, created_at, updated_at,
+                 last_used_at, status, inherit_parent)
+             VALUES (?1, ?2, ?3, ?4, 'cursor', ?5, ?6, ?6, ?6, 'Active', ?7)",
             params![
                 input.name,
                 input.working_directory,
                 input.display_id_prefix,
                 input.actions_directory,
+                terminal_wsl_enabled_int,
                 now,
                 inherit_parent_int
             ],

@@ -2010,6 +2010,7 @@ mod tests {
             working_directory: "/tmp/journal-project".to_string(),
             display_id_prefix: "J".to_string(),
             actions_directory: "actions".to_string(),
+            terminal_wsl_enabled: false,
             parent_project_id: None,
             inherit_parent: false,
         })

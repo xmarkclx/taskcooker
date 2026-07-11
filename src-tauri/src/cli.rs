@@ -787,6 +787,7 @@ mod tests {
                 working_directory: "~/p/other".to_string(),
                 display_id_prefix: "O".to_string(),
                 actions_directory: ".boomerang/actions".to_string(),
+                terminal_wsl_enabled: false,
                 parent_project_id: None,
                 inherit_parent: false,
             })
@@ -797,6 +798,7 @@ mod tests {
                 working_directory: "~/p/parent".to_string(),
                 display_id_prefix: "P".to_string(),
                 actions_directory: ".boomerang/actions".to_string(),
+                terminal_wsl_enabled: false,
                 parent_project_id: None,
                 inherit_parent: false,
             })

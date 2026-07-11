@@ -11,6 +11,8 @@ pub struct NewProject {
     pub display_id_prefix: String,
     pub actions_directory: String,
     #[serde(default)]
+    pub terminal_wsl_enabled: bool,
+    #[serde(default)]
     pub parent_project_id: Option<i64>,
     #[serde(default)]
     pub inherit_parent: bool,

@@ -2,6 +2,7 @@ import { AlertCircle, CheckCircle2, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import type { ProjectActionsDirectorySummary, ProjectSummary } from '../../domain/domain';
+import { isWindowsPlatform } from '../../tauri/platform';
 import { AppButton } from '../../ui/Button';
 import { BoomerangMark } from '../../ui/BoomerangMark';
 import { DialogBackdrop, DialogPanel } from '../../ui/Dialog';
@@ -10,6 +11,7 @@ export type NewProjectDialogSubmit = {
   name: string;
   workingDirectory: string;
   displayIdPrefix: string;
+  terminalWslEnabled: boolean;
   parentProjectId?: number;
   inheritParent?: boolean;
 };
@@ -46,6 +48,7 @@ export function NewProjectDialog({
   const [workingDirectoryEdited, setWorkingDirectoryEdited] = useState(false);
   const [prefixEdited, setPrefixEdited] = useState(false);
   const [inheritParent, setInheritParent] = useState(true);
+  const [terminalWslEnabled, setTerminalWslEnabled] = useState(false);
   const [directoryStatus, setDirectoryStatus] = useState<DirectoryStatus>({
     state: 'idle',
   });
@@ -59,6 +62,7 @@ export function NewProjectDialog({
   );
   const prefixConflict = usedPrefixes.has(displayIdPrefix.trim().toUpperCase());
   const inheriting = Boolean(parentProject) && inheritParent;
+  const showWslTerminalSetting = isWindowsPlatform();
   const canSubmit =
     name.trim().length > 0 &&
     (inheriting ||
@@ -192,6 +196,7 @@ export function NewProjectDialog({
             onSubmit({
               displayIdPrefix: displayIdPrefix.trim().toUpperCase(),
               name: name.trim(),
+              terminalWslEnabled: showWslTerminalSetting ? terminalWslEnabled : false,
               workingDirectory: workingDirectory.trim(),
               ...(parentProject ? { parentProjectId: parentProject.id, inheritParent } : {}),
             });
@@ -248,6 +253,18 @@ export function NewProjectDialog({
                   </AppButton>
                 </div>
                 <small>Project actions and agent sessions launch from this folder.</small>
+              </label>
+            ) : null}
+
+            {showWslTerminalSetting ? (
+              <label className="form-check">
+                <input
+                  aria-label="Run terminals in WSL"
+                  checked={terminalWslEnabled}
+                  onChange={(event) => setTerminalWslEnabled(event.target.checked)}
+                  type="checkbox"
+                />
+                <span>Run terminals in WSL</span>
               </label>
             ) : null}
 

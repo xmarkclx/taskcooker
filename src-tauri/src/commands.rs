@@ -1426,6 +1426,7 @@ pub fn create_project_in_db(
             working_directory,
             display_id_prefix,
             actions_directory: "actions".to_string(),
+            terminal_wsl_enabled: input.terminal_wsl_enabled,
             parent_project_id: input.parent_project_id,
             inherit_parent: input.inherit_parent,
         })
