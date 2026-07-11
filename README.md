@@ -1,6 +1,8 @@
-![Logo](docs/assets/pho.jpg)
+![Logo](docs/assets/noodles.jpg)
 
 # TaskCooker
+
+![Logo](docs/assets/v0.png)
 
 I was running 20 to 40 terminal tabs across different worktrees. Burned out, anxious, staring blankly at the screen trying to remember where I was with each task.
 
