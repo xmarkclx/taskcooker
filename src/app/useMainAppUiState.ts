@@ -46,6 +46,7 @@ const taskStateFilterAtom = atom<TodoState | ''>('');
 const taskTagFilterAtom = atom('');
 const taskSortModeAtom = atom<TaskSortMode>('manual');
 const hideDelegatedTasksAtom = atom(false);
+const showStarredOnlyAtom = atom(false);
 
 export function useMainAppUiState() {
   const [toasts, setToasts] = useAtom(toastsAtom);
@@ -86,6 +87,7 @@ export function useMainAppUiState() {
   const [taskTagFilter, setTaskTagFilter] = useAtom(taskTagFilterAtom);
   const [taskSortMode, setTaskSortMode] = useAtom(taskSortModeAtom);
   const [hideDelegatedTasks, setHideDelegatedTasks] = useAtom(hideDelegatedTasksAtom);
+  const [showStarredOnly, setShowStarredOnly] = useAtom(showStarredOnlyAtom);
   const closeTopLevelPopups = () => {
     [
       setNewProjectOpen,
@@ -156,12 +158,14 @@ export function useMainAppUiState() {
     setTaskFilter,
     setHideDelegatedTasks,
     setTaskSearch,
+    setShowStarredOnly,
     setTaskSortMode,
     setTaskStateFilter,
     setTaskTagFilter,
     setToasts,
     showToast,
     hideDelegatedTasks,
+    showStarredOnly,
     taskFilter,
     taskSearch,
     taskSortMode,

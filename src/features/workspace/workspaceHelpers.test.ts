@@ -109,6 +109,69 @@ describe('workspace helpers', () => {
     ]);
   });
 
+  it('shows only starred tasks plus parent and linked parent context', () => {
+    const todos = [
+      todo({
+        id: 1,
+        priority: 'Medium',
+        state: 'Done',
+        subtasks: [{ id: 2, displayId: 'T-2', title: 'Starred child', state: 'To Do', done: false }],
+        title: 'Filtered parent context',
+      }),
+      todo({
+        id: 2,
+        parentId: 1,
+        priority: 'Medium',
+        starred: true,
+        state: 'To Do',
+        title: 'Starred child',
+      }),
+      todo({
+        id: 3,
+        linkedTasks: [
+          {
+            done: false,
+            displayId: 'T-4',
+            id: 4,
+            parentTodoId: 3,
+            position: 0,
+            sourceProjectId: 2,
+            state: 'To Do',
+            targetProjectId: 1,
+            title: 'Starred linked task',
+          },
+        ],
+        priority: 'Medium',
+        state: 'Done',
+        title: 'Linked parent context',
+      }),
+      todo({
+        displayId: 'T-4',
+        id: 4,
+        priority: 'Medium',
+        projectId: 2,
+        starred: true,
+        state: 'To Do',
+        title: 'Starred linked task',
+      }),
+      todo({
+        id: 5,
+        priority: 'Medium',
+        state: 'To Do',
+        title: 'Unstarred sibling',
+      }),
+    ];
+
+    expect(
+      filterTasks(todos, 'tasks', '', '', '', new Set(), false, true).map((item) => item.title),
+    ).toEqual([
+      'Filtered parent context',
+      'Starred child',
+      'Linked parent context',
+      'Starred linked task',
+    ]);
+  });
+
   it('sorts by priority before review attention in the priority view', () => {
     const todos = [
       todo({ id: 1, priority: 'Low', state: 'Doing', title: 'Needs reply' }),
@@ -213,7 +276,20 @@ describe('workspace helpers', () => {
 
 function todo(
   overrides: Pick<TodoSummary, 'id' | 'priority' | 'state' | 'title'> &
-    Partial<Pick<TodoSummary, 'createdAt' | 'dependencies' | 'position' | 'subtasks'>>,
+    Partial<
+      Pick<
+        TodoSummary,
+        | 'createdAt'
+        | 'dependencies'
+        | 'displayId'
+        | 'linkedTasks'
+        | 'parentId'
+        | 'position'
+        | 'projectId'
+        | 'starred'
+        | 'subtasks'
+      >
+    >,
 ): TodoSummary {
   return {
     artifactMarkdown: '',
@@ -223,17 +299,20 @@ function todo(
     deadline: null,
     dependencies: overrides.dependencies ?? [],
     descriptionMarkdown: '',
-    displayId: `T-${overrides.id}`,
+    displayId: overrides.displayId ?? `T-${overrides.id}`,
     events: [],
     id: overrides.id,
     ownTimeSeconds: 0,
+    parentId: overrides.parentId,
     position: overrides.position ?? overrides.id,
     priority: overrides.priority,
-    projectId: 1,
+    projectId: overrides.projectId ?? 1,
     rolledUpTimeSeconds: 0,
     stale: false,
     state: overrides.state,
+    starred: overrides.starred,
     subtasks: overrides.subtasks ?? [],
+    linkedTasks: overrides.linkedTasks,
     tags: [],
     timeLogs: [],
     title: overrides.title,

@@ -2440,7 +2440,7 @@ fn app_settings_are_persisted_and_token_can_regenerate() {
         Vec::<i64>::new()
     );
     assert_eq!(initial.task_list_collapsed_todo_ids, Vec::<i64>::new());
-    assert_eq!(initial.task_list_width, 300);
+    assert_eq!(initial.task_list_width, 330);
     assert_eq!(initial.task_detail_description_width, 420);
     assert_eq!(initial.markdown_editor_mode, "rich");
     assert_eq!(
@@ -2524,7 +2524,7 @@ fn app_settings_are_persisted_and_token_can_regenerate() {
     );
 
     let narrow = db.set_task_list_width(180).unwrap();
-    assert_eq!(narrow.task_list_width, 260);
+    assert_eq!(narrow.task_list_width, 330);
     let resized = db.set_task_list_width(420).unwrap();
     assert_eq!(resized.task_list_width, 420);
     let narrow_description = db.set_task_detail_description_width(200).unwrap();

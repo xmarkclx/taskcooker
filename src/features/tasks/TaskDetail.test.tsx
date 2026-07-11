@@ -313,6 +313,49 @@ describe('TaskDetail panel visibility', () => {
     expect(screen.getByLabelText('Time range')).toBeInTheDocument();
   });
 
+  it('itemizes rolled-up descendant time logs as read-only rows', () => {
+    const project = projectFixture();
+    const parent = todoFixture({
+      ownTimeSeconds: 3600,
+      rolledUpTimeSeconds: 5400,
+      subtasks: [
+        {
+          displayId: 'T-129',
+          done: false,
+          id: 129,
+          state: 'Doing',
+          title: 'Child task',
+        },
+      ],
+      timeLogs: [timeLogFixture({ durationSeconds: 3600, id: 1 })],
+    });
+    const child = todoFixture({
+      displayId: 'T-129',
+      id: 129,
+      ownTimeSeconds: 1800,
+      parentId: parent.id,
+      rolledUpTimeSeconds: 1800,
+      timeLogs: [timeLogFixture({ durationSeconds: 1800, id: 2 })],
+      title: 'Child task',
+    });
+    renderDetail({
+      project,
+      snapshot: {
+        ...snapshotFixture(project, parent),
+        todos: [parent, child],
+      },
+      todo: parent,
+    });
+
+    expect(screen.getByText('T-129 · Child task')).toBeInTheDocument();
+    expect(screen.getByText('00:30:00')).toBeInTheDocument();
+    expect(screen.getByLabelText('Duration minutes for log 1')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Duration minutes for log 2')).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: 'Delete time log 2' }),
+    ).not.toBeInTheDocument();
+  });
+
   it('keeps an unset deadline blank until the user selects a date', () => {
     const onDeadlineChange = vi.fn();
     renderDetail({ onDeadlineChange });
@@ -798,6 +841,20 @@ function todoFixture(overrides: Partial<TodoSummary> = {}): TodoSummary {
     updatedAt: '2026-06-20T09:40:00Z',
     ...overrides,
     createdAt: overrides.createdAt ?? '2026-06-20T09:00:00Z',
+  };
+}
+
+function timeLogFixture(
+  overrides: Partial<TodoSummary['timeLogs'][number]> = {},
+): TodoSummary['timeLogs'][number] {
+  return {
+    durationSeconds: 60,
+    endedAt: '2026-06-20T09:01:00Z',
+    id: 1,
+    running: false,
+    source: 'manual',
+    startedAt: '2026-06-20T09:00:00Z',
+    ...overrides,
   };
 }
 

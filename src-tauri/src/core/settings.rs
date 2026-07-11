@@ -7,8 +7,8 @@ use super::*;
 pub(super) const DEFAULT_MCP_PORT: i64 = 8788;
 #[cfg(not(debug_assertions))]
 pub(super) const DEFAULT_MCP_PORT: i64 = 8787;
-pub(super) const DEFAULT_TASK_LIST_WIDTH: i64 = 300;
-pub(super) const MIN_TASK_LIST_WIDTH: i64 = 260;
+pub(super) const DEFAULT_TASK_LIST_WIDTH: i64 = 330;
+pub(super) const MIN_TASK_LIST_WIDTH: i64 = 330;
 pub(super) const MAX_TASK_LIST_WIDTH: i64 = 520;
 pub(super) const DEFAULT_TASK_DETAIL_DESCRIPTION_WIDTH: i64 = 420;
 pub(super) const MIN_TASK_DETAIL_DESCRIPTION_WIDTH: i64 = 320;

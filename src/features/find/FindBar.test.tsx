@@ -1,7 +1,11 @@
 import { fireEvent, render, screen } from '@testing-library/react';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 
 import { FindBar } from './FindBar';
+
+const appStyles = readFileSync(resolve(process.cwd(), 'src/styles.css'), 'utf8');
 
 function renderFindBar(content: string, onClose = vi.fn()) {
   const utils = render(
@@ -21,6 +25,17 @@ function rectList(...rects: DOMRect[]): DOMRectList {
 }
 
 describe('FindBar', () => {
+  it('uses an opaque overlay surface instead of blending into app chrome', () => {
+    const findBarRule = cssRule('.find-bar');
+    const findBarInputRule = cssRule('.find-bar-input');
+
+    expect(findBarRule).toContain('background: var(--color-menu);');
+    expect(findBarRule).not.toMatch(/opacity:\s*0?\.\d/);
+    expect(findBarRule).toContain('z-index: 1000;');
+    expect(findBarInputRule).toContain('background: var(--color-surface-warm);');
+    expect(findBarInputRule).toContain('border: 1px solid var(--line);');
+  });
+
   it('reports the number of matches for the typed query', async () => {
     const { input } = renderFindBar('banana banana split');
     fireEvent.change(input, { target: { value: 'banana' } });
@@ -73,3 +88,13 @@ describe('FindBar', () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 });
+
+function cssRule(selector: string) {
+  const escapedSelector = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const match = appStyles.match(
+    new RegExp(`${escapedSelector}\\s*\\{(?<body>[\\s\\S]*?)\\n\\}`),
+  );
+
+  expect(match, `Missing CSS rule for ${selector}`).not.toBeNull();
+  return match?.groups?.body ?? '';
+}

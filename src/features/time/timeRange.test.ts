@@ -21,6 +21,46 @@ describe('time range summaries', () => {
     expect(summary.visibleLogs).toHaveLength(1);
   });
 
+  it('returns itemized rolled-up log entries with task context', () => {
+    const child = makeTodo({
+      displayId: 'T-2',
+      id: 2,
+      title: 'Child task',
+      timeLogs: [makeLog(2, date(2026, 6, 20, 10), date(2026, 6, 20, 10, 30), 1800)],
+    });
+    const todo = makeTodo({
+      subtasks: [{ id: 2, displayId: 'T-2', title: 'Child task', state: 'Doing', done: false }],
+      timeLogs: [makeLog(1, date(2026, 6, 20, 9), date(2026, 6, 20, 10), 3600)],
+    });
+
+    const summary = summarizeTodoTime(todo, [todo, child], selection('overall'), date(2026, 6, 20, 12));
+
+    expect(
+      summary.visibleLogEntries.map((entry) => ({
+        displayId: entry.todoDisplayId,
+        durationSeconds: entry.visibleDurationSeconds,
+        id: entry.log.id,
+        own: entry.isOwnTodo,
+        title: entry.todoTitle,
+      })),
+    ).toEqual([
+      {
+        displayId: 'T-2',
+        durationSeconds: 1800,
+        id: 2,
+        own: false,
+        title: 'Child task',
+      },
+      {
+        displayId: 'T-1',
+        durationSeconds: 3600,
+        id: 1,
+        own: true,
+        title: 'Parent',
+      },
+    ]);
+  });
+
   it('filters own totals, rolled-up totals, and logs to today', () => {
     const child = makeTodo({
       id: 2,

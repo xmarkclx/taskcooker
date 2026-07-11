@@ -100,7 +100,7 @@ import {
   type RowId,
 } from './treeReorder';
 
-const MIN_TASK_LIST_WIDTH = 260;
+const MIN_TASK_LIST_WIDTH = 330;
 const MAX_TASK_LIST_WIDTH = 520;
 const TASK_LIST_KEYBOARD_STEP = 16;
 const TASK_VIEW_OPTIONS: Array<{
@@ -220,8 +220,10 @@ export const TaskList = memo(function TaskList({
   delegatedCount = 0,
   filter,
   hideDelegated = false,
+  showStarredOnly = false,
   onFilterChange,
   onHideDelegatedChange,
+  onShowStarredOnlyChange,
   onNewTask,
   onOpenCreateTodo,
   projects = EMPTY_PROJECTS,
@@ -252,6 +254,7 @@ export const TaskList = memo(function TaskList({
   tagFilter,
   tags,
   tasksCount,
+  starredCount = 0,
   width,
   childProjects = [],
   selectedProjectId,
@@ -271,8 +274,10 @@ export const TaskList = memo(function TaskList({
   delegatedCount?: number;
   filter: TaskFilter;
   hideDelegated?: boolean;
+  showStarredOnly?: boolean;
   onFilterChange: (filter: TaskFilter) => void;
   onHideDelegatedChange?: (hideDelegated: boolean) => void;
+  onShowStarredOnlyChange?: (showStarredOnly: boolean) => void;
   onNewTask: () => void;
   onOpenCreateTodo?: (input: {
     parentId: number | null;
@@ -316,6 +321,7 @@ export const TaskList = memo(function TaskList({
   tagFilter: string;
   tags: string[];
   tasksCount: number;
+  starredCount?: number;
   width: number;
   childProjects?: ProjectSummary[];
   selectedProjectId?: number;
@@ -1047,10 +1053,13 @@ export const TaskList = memo(function TaskList({
         hideDelegated={hideDelegated}
         onFilterChange={onFilterChange}
         onHideDelegatedChange={onHideDelegatedChange}
+        onShowStarredOnlyChange={onShowStarredOnlyChange}
         onSortModeChange={onSortModeChange}
         onStateFilterChange={onStateFilterChange}
         onTagFilterChange={onTagFilterChange}
+        showStarredOnly={showStarredOnly}
         sortMode={sortMode}
+        starredCount={starredCount}
         stateFilter={stateFilter}
         tagFilter={tagFilter}
         tags={tags}
@@ -1138,6 +1147,7 @@ export const TaskList = memo(function TaskList({
                 return (
                   <SubprojectRow
                     activeBoxId={activeBoxId}
+                    childCount={row.childTodos.length}
                     dropIndicator={
                       dropInstruction?.indicator.rowId === subRowId && draggedRowId !== null
                         ? dropInstruction.indicator
@@ -1384,15 +1394,49 @@ type TaskListHeaderProps = {
   hideDelegated: boolean;
   onFilterChange: (filter: TaskFilter) => void;
   onHideDelegatedChange?: (hideDelegated: boolean) => void;
+  onShowStarredOnlyChange?: (showStarredOnly: boolean) => void;
   onSortModeChange: (mode: TaskSortMode) => void;
   onStateFilterChange: (state: TodoState | '') => void;
   onTagFilterChange: (tag: string) => void;
+  showStarredOnly: boolean;
   sortMode: TaskSortMode;
+  starredCount: number;
   stateFilter: TodoState | '';
   tagFilter: string;
   tags: string[];
   tasksCount: number;
 };
+
+type TaskFilterToggleButtonProps = {
+  ariaLabel: string;
+  children: ReactNode;
+  className: string;
+  onPressedChange?: (pressed: boolean) => void;
+  pressed: boolean;
+  title: string;
+};
+
+function TaskFilterToggleButton({
+  ariaLabel,
+  children,
+  className,
+  onPressedChange,
+  pressed,
+  title,
+}: TaskFilterToggleButtonProps) {
+  return (
+    <button
+      aria-label={ariaLabel}
+      aria-pressed={pressed}
+      className={`task-filter-toggle ${className} ${pressed ? 'active' : ''}`}
+      onClick={() => onPressedChange?.(!pressed)}
+      title={title}
+      type="button"
+    >
+      {children}
+    </button>
+  );
+}
 
 function TaskListHeader({
   archivedCount,
@@ -1401,10 +1445,13 @@ function TaskListHeader({
   hideDelegated,
   onFilterChange,
   onHideDelegatedChange,
+  onShowStarredOnlyChange,
   onSortModeChange,
   onStateFilterChange,
   onTagFilterChange,
+  showStarredOnly,
   sortMode,
+  starredCount,
   stateFilter,
   tagFilter,
   tags,
@@ -1415,6 +1462,10 @@ function TaskListHeader({
     delegatedCount === 1 ? '1 Delegated Task' : `${delegatedCount} Delegated Tasks`;
   const delegatedToggleLabel =
     delegatedCount > 0 ? `Hide Delegated Tasks ${delegatedCountLabel}` : 'Hide Delegated Tasks';
+  const starredCountLabel =
+    starredCount === 1 ? '1 Starred Task' : `${starredCount} Starred Tasks`;
+  const starredToggleLabel =
+    starredCount > 0 ? `Show Only Starred Tasks ${starredCountLabel}` : 'Show Only Starred Tasks';
 
   return (
     <div className="list-filter-row">
@@ -1459,21 +1510,40 @@ function TaskListHeader({
           </>
         )}
       </TaskListDropdown>
-      <button
-        aria-label={delegatedToggleLabel}
-        aria-pressed={hideDelegated}
-        className={`delegated-filter-toggle ${hideDelegated ? 'active' : ''}`}
-        onClick={() => onHideDelegatedChange?.(!hideDelegated)}
+      <TaskFilterToggleButton
+        ariaLabel={delegatedToggleLabel}
+        className="delegated-filter-toggle"
+        onPressedChange={onHideDelegatedChange}
+        pressed={hideDelegated}
         title="Hide Delegated Tasks"
-        type="button"
       >
         <DelegatedCookingPotIcon cooking={delegatedCount > 0} />
         {delegatedCount > 0 ? (
-          <span aria-hidden="true" className="delegated-filter-count">
+          <span aria-hidden="true" className="task-filter-count delegated-filter-count">
             {delegatedCount}
           </span>
         ) : null}
-      </button>
+      </TaskFilterToggleButton>
+      <TaskFilterToggleButton
+        ariaLabel={starredToggleLabel}
+        className="starred-filter-toggle"
+        onPressedChange={onShowStarredOnlyChange}
+        pressed={showStarredOnly}
+        title="Show Only Starred Tasks"
+      >
+        <Star
+          aria-hidden="true"
+          className="starred-filter-icon"
+          fill={showStarredOnly ? 'currentColor' : 'none'}
+          size={16}
+          strokeWidth={2.2}
+        />
+        {starredCount > 0 ? (
+          <span aria-hidden="true" className="task-filter-count starred-filter-count">
+            {starredCount}
+          </span>
+        ) : null}
+      </TaskFilterToggleButton>
       <div aria-label="Task list view" className="segment view-segment" role="radiogroup">
         {TASK_VIEW_OPTIONS.map((view) => {
           const selected = sortMode === view.mode;
@@ -1754,6 +1824,7 @@ function SortableProjectRootRow({
 function SubprojectRow({
   activeBoxId,
   canReorder,
+  childCount,
   dropIndicator,
   dropLabel,
   dropPointMarkers,
@@ -1771,6 +1842,7 @@ function SubprojectRow({
 }: {
   activeBoxId?: string | null;
   canReorder: boolean;
+  childCount: number;
   dropIndicator?: DropIndicator | null;
   dropLabel?: string | null;
   dropPointMarkers?: DropPointMarker[] | null;
@@ -1787,8 +1859,8 @@ function SubprojectRow({
   rowId: ProjectRootRowId;
 }) {
   const accentStyle = projectAccentStyle(project, projects);
-  const hasTasks = project.activeTodoCount > 0;
-  const taskLabel = project.activeTodoCount === 1 ? 'task' : 'tasks';
+  const hasTasks = childCount > 0;
+  const taskLabel = childCount === 1 ? 'task' : 'tasks';
   const marker = kind === 'link' ? 'Linked' : 'Subproject';
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     disabled: { draggable: !canReorder },
@@ -1831,7 +1903,7 @@ function SubprojectRow({
         </button>
         <span className="project-dot" />
         <button
-          aria-label={`Focus project ${project.name}, ${project.activeTodoCount} ${taskLabel}`}
+          aria-label={`Focus project ${project.name}, ${childCount} ${taskLabel}`}
           className="task-row-select project-root-select"
           onClick={() => onProjectFocus?.(project.id)}
           type="button"
@@ -1846,7 +1918,7 @@ function SubprojectRow({
             <span className="task-row-foot">
               <span />
               <span className="task-row-foot-meta">
-                <span className="meta-chip">{`${project.activeTodoCount} ${taskLabel}`}</span>
+                <span className="meta-chip">{`${childCount} ${taskLabel}`}</span>
                 {project.status !== 'Active' ? (
                   <span className={`state-badge ${project.status.toLowerCase()}`}>
                     {project.status}

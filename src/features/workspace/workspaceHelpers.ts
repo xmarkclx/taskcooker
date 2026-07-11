@@ -60,9 +60,10 @@ export function filterTasks(
   tagFilter: string,
   reviewTodoIds: ReadonlySet<number> = new Set(),
   hideDelegated = false,
+  showStarredOnly = false,
 ): TodoSummary[] {
   const query = searchValue.trim().toLowerCase();
-  return todos.filter((todo) => {
+  const matchesVisibleFilters = (todo: TodoSummary) => {
     if (hideDelegated && todo.state === 'Delegated') {
       return false;
     }
@@ -92,7 +93,62 @@ export function filterTasks(
       .join(' ')
       .toLowerCase()
       .includes(query);
-  });
+  };
+
+  if (!showStarredOnly) {
+    return todos.filter(matchesVisibleFilters);
+  }
+
+  const contextTodoIds = starredContextTodoIds(
+    todos,
+    (todo) => todo.starred === true && matchesVisibleFilters(todo),
+  );
+
+  return todos.filter((todo) => contextTodoIds.has(todo.id));
+}
+
+function starredContextTodoIds(
+  todos: TodoSummary[],
+  isStarredCandidate: (todo: TodoSummary) => boolean,
+): Set<number> {
+  const byId = new Map(todos.map((todo) => [todo.id, todo]));
+  const parentIdsByChildId = new Map<number, number>();
+  const linkedParentIdsByChildId = new Map<number, number[]>();
+
+  for (const todo of todos) {
+    if (todo.parentId !== undefined && todo.parentId !== null) {
+      parentIdsByChildId.set(todo.id, todo.parentId);
+    }
+    for (const subtask of todo.subtasks) {
+      parentIdsByChildId.set(subtask.id, todo.id);
+    }
+    for (const linkedTask of todo.linkedTasks ?? []) {
+      const parentIds = linkedParentIdsByChildId.get(linkedTask.id) ?? [];
+      parentIds.push(todo.id);
+      linkedParentIdsByChildId.set(linkedTask.id, parentIds);
+    }
+  }
+
+  const contextTodoIds = new Set<number>();
+  const includeWithParents = (todoId: number) => {
+    let currentId: number | undefined = todoId;
+    while (currentId !== undefined && byId.has(currentId) && !contextTodoIds.has(currentId)) {
+      contextTodoIds.add(currentId);
+      currentId = parentIdsByChildId.get(currentId);
+    }
+  };
+
+  for (const todo of todos) {
+    if (!isStarredCandidate(todo)) {
+      continue;
+    }
+    includeWithParents(todo.id);
+    for (const linkedParentId of linkedParentIdsByChildId.get(todo.id) ?? []) {
+      includeWithParents(linkedParentId);
+    }
+  }
+
+  return contextTodoIds;
 }
 
 export function matchesTaskFilter(

@@ -40,6 +40,7 @@ import { ProjectActionIcon } from '../projects/ProjectActionIcon';
 import {
   summarizeTodoTime,
   type CustomTimeRangeUnit,
+  type TimeLogEntry,
   type TimeRangeMode,
 } from '../time/timeRange';
 import { useLiveElapsedSeconds, useNow } from '../time/liveTime';
@@ -924,17 +925,23 @@ export const TaskDetail = memo(function TaskDetail({
                 )}
               </div>
               <div className="time-log-list">
-                {timeSummary.visibleLogs.length ? (
-                  timeSummary.visibleLogs.map((log) => (
+                {timeSummary.visibleLogEntries.length ? (
+                  timeSummary.visibleLogEntries.map((entry) => (
                     <TimeLogRow
-                      key={log.id}
+                      isEditable={entry.isOwnTodo}
+                      key={`${entry.todoId}-${entry.log.id}`}
                       durationSecondsOverride={
-                        runningLog?.id === log.id ? liveRunningLogSeconds : undefined
+                        runningLog?.id === entry.log.id && entry.isOwnTodo
+                          ? liveRunningLogSeconds
+                          : entry.isOwnTodo
+                            ? undefined
+                            : entry.visibleDurationSeconds
                       }
-                      log={log}
-                      onDelete={() => onDeleteTimeLog(log.id)}
+                      log={entry.log}
+                      taskLabel={timeLogEntryTaskLabel(entry)}
+                      onDelete={() => onDeleteTimeLog(entry.log.id)}
                       onSave={(durationSeconds) =>
-                        onUpdateTimeLogDuration(log.id, durationSeconds)
+                        onUpdateTimeLogDuration(entry.log.id, durationSeconds)
                       }
                     />
                   ))
@@ -1292,14 +1299,18 @@ function DeadlinePicker({
 
 function TimeLogRow({
   durationSecondsOverride,
+  isEditable,
   log,
   onDelete,
   onSave,
+  taskLabel,
 }: {
   durationSecondsOverride?: number;
+  isEditable: boolean;
   log: TodoSummary['timeLogs'][number];
   onDelete: () => void;
   onSave: (durationSeconds: number) => void;
+  taskLabel: string;
 }) {
   const [minutes, setMinutes] = useState(() =>
     Math.max(1, Math.round(log.durationSeconds / 60)).toString(),
@@ -1312,41 +1323,52 @@ function TimeLogRow({
     Math.round(minutesValue * 60) !== log.durationSeconds;
 
   return (
-    <div className="time-log-row">
+    <div className={`time-log-row ${isEditable ? '' : 'read-only'}`}>
       <div>
         <strong>{formatDuration(durationSecondsOverride ?? log.durationSeconds)}</strong>
+        <span className="time-log-task">{taskLabel}</span>
         <span>
           {log.source}
           {log.running ? ' · running' : ''}
         </span>
       </div>
-      <input
-        aria-label={`Duration minutes for log ${log.id}`}
-        disabled={log.running}
-        min="1"
-        onChange={(event) => setMinutes(event.target.value)}
-        type="number"
-        value={minutes}
-      />
-      <button
-        aria-label={`Save time log ${log.id}`}
-        disabled={!canSave}
-        onClick={() => onSave(Math.round(minutesValue * 60))}
-        title={`Save time log ${log.id}`}
-        type="button"
-      >
-        <Check size={12} />
-      </button>
-      <button
-        aria-label={`Delete time log ${log.id}`}
-        disabled={log.running}
-        onClick={onDelete}
-        type="button"
-      >
-        <X size={12} />
-      </button>
+      {isEditable ? (
+        <>
+          <input
+            aria-label={`Duration minutes for log ${log.id}`}
+            disabled={log.running}
+            min="1"
+            onChange={(event) => setMinutes(event.target.value)}
+            type="number"
+            value={minutes}
+          />
+          <button
+            aria-label={`Save time log ${log.id}`}
+            disabled={!canSave}
+            onClick={() => onSave(Math.round(minutesValue * 60))}
+            title={`Save time log ${log.id}`}
+            type="button"
+          >
+            <Check size={12} />
+          </button>
+          <button
+            aria-label={`Delete time log ${log.id}`}
+            disabled={log.running}
+            onClick={onDelete}
+            type="button"
+          >
+            <X size={12} />
+          </button>
+        </>
+      ) : (
+        <span className="time-log-read-only">Rolled up</span>
+      )}
     </div>
   );
+}
+
+function timeLogEntryTaskLabel(entry: TimeLogEntry): string {
+  return `${entry.todoDisplayId} · ${entry.todoTitle}`;
 }
 
 function PriorityMetaSelect({

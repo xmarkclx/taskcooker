@@ -179,7 +179,7 @@ pub(super) fn migrate(conn: &Connection) -> AppResult<()> {
             task_list_collapsed_project_ids TEXT NOT NULL DEFAULT '[]',
             task_list_collapsed_subproject_ids TEXT NOT NULL DEFAULT '[]',
             task_list_collapsed_todo_ids TEXT NOT NULL DEFAULT '[]',
-            task_list_width INTEGER NOT NULL DEFAULT 300,
+            task_list_width INTEGER NOT NULL DEFAULT 330,
             task_detail_description_width INTEGER NOT NULL DEFAULT 420,
             markdown_editor_mode TEXT NOT NULL DEFAULT 'rich',
             markdown_editor_font_family TEXT NOT NULL DEFAULT 'sans-serif',

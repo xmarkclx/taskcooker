@@ -221,11 +221,13 @@ export function MainApp() {
     setHideDelegatedTasks,
     setTaskFilter,
     setTaskSearch,
+    setShowStarredOnly,
     setTaskSortMode,
     setTaskStateFilter,
     setTaskTagFilter,
     showToast,
     hideDelegatedTasks,
+    showStarredOnly,
     taskFilter,
     taskSearch,
     taskSortMode,
@@ -568,6 +570,10 @@ export function MainApp() {
   }, [projectTodos]);
   const archivedCount = stateFilterCounts.Archived ?? 0;
   const delegatedCount = stateFilterCounts.Delegated ?? 0;
+  const starredCount = useMemo(
+    () => projectTodos.filter((todo) => todo.starred === true).length,
+    [projectTodos],
+  );
   const unreadTodoIds = useMemo(
     () => new Set(data.messages.filter((message) => message.unread).map((message) => message.todoId)),
     [data.messages],
@@ -590,6 +596,7 @@ export function MainApp() {
           taskTagFilter,
           unreadTodoIds,
           hideDelegatedTasks,
+          showStarredOnly,
         ),
         taskSortMode,
         unreadTodoIds,
@@ -603,6 +610,7 @@ export function MainApp() {
       taskSortMode,
       unreadTodoIds,
       hideDelegatedTasks,
+      showStarredOnly,
     ],
   );
   const visibleTodoIdsInTaskListOrder = () =>
@@ -1630,8 +1638,10 @@ export function MainApp() {
     canCreateTask: Boolean(taskProject),
     filter: taskFilter,
     hideDelegated: hideDelegatedTasks,
+    showStarredOnly,
     onFilterChange: setTaskFilter,
     onHideDelegatedChange: setHideDelegatedTasks,
+    onShowStarredOnlyChange: setShowStarredOnly,
     onNewTask: () => openNewTaskDialog(),
     onOpenCreateTodo: openNewTaskDialog,
     onWidthChange: (width) => {
@@ -1654,6 +1664,7 @@ export function MainApp() {
     archivedCount,
     childProjects,
     delegatedCount,
+    starredCount,
     focusedProjectId: focusedProject?.id,
     selectedProjectId,
     onProjectSelect: selectProject,

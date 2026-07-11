@@ -12,6 +12,19 @@ const appStyles = readFileSync(
 );
 
 describe('TaskList views', () => {
+  it('keeps the task list wide enough for the filter and toolbar controls', () => {
+    const todos = [makeTodo({ id: 1, position: 0, title: 'First task' })];
+
+    render(<TaskList {...baseProps({ todos })} width={260} />);
+
+    const taskList = screen.getByRole('complementary', { name: 'Task list' });
+    expect(taskList).toHaveStyle({ width: '330px' });
+    expect(
+      within(taskList).getByRole('separator', { name: 'Resize task list' }),
+    ).toHaveAttribute('aria-valuemin', '330');
+    expect(cssRule('.task-list')).toContain('min-width: 330px;');
+  });
+
   it('shows task list view options as an icon group with only the current view selected', () => {
     const onSortModeChange = vi.fn();
     const todos = [makeTodo({ id: 1, position: 0, title: 'First task' })];
@@ -180,30 +193,74 @@ describe('TaskList views', () => {
     expect(onHideDelegatedChange).toHaveBeenLastCalledWith(false);
   });
 
+  it('toggles starred-only task visibility from a separate header button', () => {
+    const onShowStarredOnlyChange = vi.fn();
+    const todos = [
+      makeTodo({ id: 1, position: 0, title: 'First task' }),
+      makeTodo({ id: 2, position: 1, starred: true, title: 'Starred task' }),
+      makeTodo({ id: 3, position: 2, starred: true, title: 'Second starred task' }),
+    ];
+    const { rerender } = render(
+      <TaskList
+        {...baseProps({ todos })}
+        onShowStarredOnlyChange={onShowStarredOnlyChange}
+        showStarredOnly={false}
+        starredCount={2}
+      />,
+    );
+
+    const toggle = screen.getByRole('button', {
+      name: 'Show Only Starred Tasks 2 Starred Tasks',
+    });
+    expect(toggle).toHaveAttribute('aria-pressed', 'false');
+    expect(toggle.querySelector('.starred-filter-icon')).not.toBeNull();
+    expect(within(toggle).getByText('2')).toHaveClass('starred-filter-count');
+
+    fireEvent.click(toggle);
+    expect(onShowStarredOnlyChange).toHaveBeenCalledWith(true);
+
+    rerender(
+      <TaskList
+        {...baseProps({ todos })}
+        onShowStarredOnlyChange={onShowStarredOnlyChange}
+        showStarredOnly
+        starredCount={2}
+      />,
+    );
+
+    expect(
+      screen.getByRole('button', { name: 'Show Only Starred Tasks 2 Starred Tasks' }),
+    ).toHaveAttribute('aria-pressed', 'true');
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Show Only Starred Tasks 2 Starred Tasks' }),
+    );
+    expect(onShowStarredOnlyChange).toHaveBeenLastCalledWith(false);
+  });
+
   it('styles the delegated visibility toggle as a raised button with pressed states', () => {
-    const toggleRule = cssRule('.delegated-filter-toggle');
+    const toggleRule = cssRule('.task-filter-toggle');
     expect(toggleRule).toContain('border: 1px solid var(--line);');
     expect(toggleRule).toContain('box-shadow:');
 
-    const activeRule = cssRule('.delegated-filter-toggle.active');
+    const activeRule = cssRule('.task-filter-toggle.active');
     expect(activeRule).toContain('box-shadow: inset 0 2px 4px rgb(var(--color-shadow-rgb) / 26%);');
     expect(activeRule).toContain('transform: translateY(1px);');
     expect(activeRule).not.toContain('background:');
     expect(activeRule).not.toContain('border-color:');
     expect(activeRule).not.toContain('color:');
 
-    const hoverRule = cssRulesForSelector('.delegated-filter-toggle:hover');
+    const hoverRule = cssRulesForSelector('.task-filter-toggle:hover');
     expect(hoverRule).not.toContain('background:');
     expect(hoverRule).not.toContain('border-color:');
     expect(hoverRule).not.toContain('color:');
 
     const activeBadgeRule = cssRulesForSelector(
-      '.delegated-filter-toggle.active .delegated-filter-count',
+      '.task-filter-toggle.active .task-filter-count',
     );
     expect(activeBadgeRule).not.toContain('background:');
     expect(activeBadgeRule).not.toContain('color:');
 
-    const badgeRule = cssRule('.delegated-filter-count');
+    const badgeRule = cssRule('.task-filter-count');
     expect(badgeRule).toContain('box-shadow: inset 0 1px 0');
     expect(badgeRule).toContain('margin-left: -1px;');
 
@@ -219,7 +276,7 @@ describe('TaskList views', () => {
     );
     expect(reducedMotionRule).toContain('animation: none;');
 
-    const pressedRules = cssRule('.delegated-filter-toggle.delegated-filter-toggle:not(:disabled):active');
+    const pressedRules = cssRule('.task-filter-toggle.task-filter-toggle:not(:disabled):active');
     expect(pressedRules).toContain('transform: translateY(1px);');
     expect(pressedRules).not.toContain('scale(');
     expect(pressedRules).toContain(
@@ -248,6 +305,9 @@ describe('TaskList views', () => {
     const filterButton = screen.getByRole('button', { name: 'Filter tasks' });
     const toggle = screen.getByRole('button', { name: 'Hide Delegated Tasks' });
     expect(filterButton.closest('.list-filter-dropdown')?.nextElementSibling).toBe(toggle);
+    expect(toggle.nextElementSibling).toBe(
+      screen.getByRole('button', { name: 'Show Only Starred Tasks' }),
+    );
     expect(toggle.querySelector('.delegated-cooking-pot-steam')).toBeNull();
     expect(toggle.querySelector('.delegated-filter-count')).toBeNull();
     expect(cssRule('.list-filter-row')).not.toContain('justify-content: space-between;');

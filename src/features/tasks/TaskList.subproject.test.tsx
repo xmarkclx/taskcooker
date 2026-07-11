@@ -110,6 +110,30 @@ describe('TaskList subproject rows', () => {
     expect(screen.getByRole('button', { name: /child task/i })).toBeInTheDocument();
   });
 
+  it('shows the filtered child-task count instead of the project active count', () => {
+    const child = makeProject({
+      activeTodoCount: 2,
+      id: 2,
+      name: 'Blocked API',
+      displayIdPrefix: 'BA',
+    });
+    const todos = [
+      makeTodo({ id: 1, projectId: 1, position: 0, title: 'Parent task' }),
+    ];
+
+    render(
+      <TaskList
+        {...baseProps({ todos })}
+        childProjects={[child]}
+        projects={[makeProject({ id: 1, name: 'Client', displayIdPrefix: 'C' }), child]}
+        selectedProjectId={1}
+      />,
+    );
+
+    expect(screen.getByText('0 tasks')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /subproject blocked api/i })).toBeDisabled();
+  });
+
   it('renders a status badge when the child project is not Active', () => {
     const child = makeProject({
       id: 2,

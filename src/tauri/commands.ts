@@ -132,7 +132,7 @@ export const fallbackAppSettings: AppSettingsSummary = {
   taskListCollapsedProjectIds: [],
   taskListCollapsedSubprojectIds: [],
   taskListCollapsedTodoIds: [],
-  taskListWidth: 300,
+  taskListWidth: 330,
   taskDetailDescriptionWidth: 420,
   markdownTocHidden: false,
   slowdownProfilerEnabled: true,

@@ -1703,7 +1703,7 @@ button {
 .task-header-timer-button:not(:disabled):active,
 .state-badge-button:not(:disabled):active,
 .context-badge-button:not(:disabled):active,
-.delegated-filter-toggle:not(:disabled):active,
+.task-filter-toggle:not(:disabled):active,
 .actions-menu-icon-button:not(:disabled):active,
 .running-timer-control:not(:disabled):active,
 .sort-button:not(:disabled):active,
@@ -1733,7 +1733,7 @@ button {
     .task-header-timer-button,
     .state-badge-button,
     .context-badge-button,
-    .delegated-filter-toggle,
+    .task-filter-toggle,
     .actions-menu-icon-button,
     .running-timer-control,
     .sort-button,
@@ -1785,7 +1785,7 @@ button {
   flex-direction: column;
   max-width: 520px;
   min-height: 0;
-  min-width: 260px;
+  min-width: 330px;
   position: relative;
 }
 
@@ -1868,7 +1868,7 @@ button {
   right: auto;
 }
 
-.delegated-filter-toggle {
+.task-filter-toggle {
   align-items: center;
   background: var(--color-surface-warm);
   border: 1px solid var(--line);
@@ -1889,26 +1889,30 @@ button {
   width: auto;
 }
 
-.delegated-filter-toggle:hover,
-.delegated-filter-toggle:focus-visible {
+.task-filter-toggle:hover,
+.task-filter-toggle:focus-visible {
   outline: none;
 }
 
-.delegated-filter-toggle:focus-visible {
+.task-filter-toggle:focus-visible {
   box-shadow:
     0 0 0 3px var(--focus-ring),
     inset 0 1px 0 var(--color-surface),
     0 1px 1px rgb(var(--color-shadow-rgb) / 10%);
 }
 
-.delegated-filter-toggle.active {
+.task-filter-toggle.active {
   box-shadow: inset 0 2px 4px rgb(var(--color-shadow-rgb) / 26%);
   transform: translateY(1px);
 }
 
-.delegated-filter-toggle.delegated-filter-toggle:not(:disabled):active {
+.task-filter-toggle.task-filter-toggle:not(:disabled):active {
   box-shadow: inset 0 2px 4px rgb(var(--color-shadow-rgb) / 26%);
   transform: translateY(1px);
+}
+
+.starred-filter-toggle.active {
+  color: var(--color-primary);
 }
 
 .app-shell[data-theme='dark'] .delegated-filter-toggle.active {
@@ -1931,6 +1935,10 @@ button {
   width: 16px;
 }
 
+.starred-filter-icon {
+  flex: 0 0 auto;
+}
+
 .delegated-cooking-pot-steam {
   animation: delegated-cooking-steam 1.35s ease-in-out infinite;
   transform-origin: center;
@@ -1940,7 +1948,7 @@ button {
   animation: delegated-cooking-steam 1.35s ease-in-out infinite;
 }
 
-.delegated-filter-count {
+.task-filter-count {
   align-items: center;
   background: var(--color-primary);
   border-radius: 999px;
@@ -1959,7 +1967,7 @@ button {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .delegated-filter-toggle {
+  .task-filter-toggle {
     transition: none;
   }
 
@@ -5287,6 +5295,10 @@ pre {
   padding: 7px;
 }
 
+.time-log-row.read-only {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
 .time-log-row strong {
   color: var(--color-primary);
   display: block;
@@ -5299,6 +5311,21 @@ pre {
   font-size: 10px;
   font-weight: 700;
   text-transform: capitalize;
+}
+
+.time-log-row .time-log-task {
+  color: var(--color-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-transform: none;
+  white-space: nowrap;
+}
+
+.time-log-row .time-log-read-only {
+  background: var(--color-surface-muted);
+  border-radius: 999px;
+  color: var(--muted);
+  padding: 5px 8px;
 }
 
 .time-log-row input {
@@ -5350,7 +5377,7 @@ pre {
 
 .find-bar {
   align-items: center;
-  background: var(--surface);
+  background: var(--color-menu);
   border: 1px solid var(--line);
   border-radius: 10px;
   box-shadow: 0 12px 32px rgb(var(--color-shadow-rgb) / 24%);
@@ -5370,12 +5397,15 @@ pre {
 }
 
 .find-bar-input {
-  background: transparent;
-  border: 0;
+  background: var(--color-surface-warm);
+  border: 1px solid var(--line);
+  border-radius: 8px;
   color: var(--color-text);
   font-size: 14px;
+  min-height: 28px;
   min-width: 200px;
   outline: none;
+  padding: 0 9px;
 }
 
 .find-bar-input::placeholder {

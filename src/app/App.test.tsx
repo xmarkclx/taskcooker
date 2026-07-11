@@ -1609,7 +1609,7 @@ describe('Boomerang app shell', () => {
     ).toBeInTheDocument();
 
     fireEvent.click(
-      within(taskList).getByRole('button', { name: 'Hide Delegated Tasks' }),
+      within(taskList).getByRole('button', { name: /hide delegated tasks/i }),
     );
 
     await waitFor(() => {
@@ -1621,7 +1621,7 @@ describe('Boomerang app shell', () => {
     });
 
     fireEvent.click(
-      within(taskList).getByRole('button', { name: 'Hide Delegated Tasks' }),
+      within(taskList).getByRole('button', { name: /hide delegated tasks/i }),
     );
 
     expect(
@@ -3952,7 +3952,7 @@ describe('Boomerang app shell', () => {
       });
     vi.spyOn(tauriCommands, 'loadAppSettings').mockResolvedValue({
       ...tauriCommands.fallbackAppSettings,
-      taskListWidth: 300,
+      taskListWidth: 330,
     });
 
     renderApp('/?projectId=1&todoId=128');
@@ -3960,12 +3960,12 @@ describe('Boomerang app shell', () => {
     const taskList = await screen.findByRole('complementary', {
       name: 'Task list',
     });
-    expect(taskList).toHaveStyle({ width: '300px' });
+    expect(taskList).toHaveStyle({ width: '330px' });
 
     const resizeHandle = within(taskList).getByRole('separator', {
       name: 'Resize task list',
     });
-    fireEvent.pointerDown(resizeHandle, { clientX: 300, pointerId: 1 });
+    fireEvent.pointerDown(resizeHandle, { clientX: 330, pointerId: 1 });
     fireEvent.pointerMove(window, { clientX: 360, pointerId: 1 });
     fireEvent.pointerUp(window, { clientX: 360, pointerId: 1 });
 

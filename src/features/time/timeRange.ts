@@ -11,10 +11,20 @@ export type TimeRangeSelection = {
   unit: CustomTimeRangeUnit;
 };
 
+export type TimeLogEntry = {
+  isOwnTodo: boolean;
+  log: TodoSummary['timeLogs'][number];
+  todoDisplayId: string;
+  todoId: number;
+  todoTitle: string;
+  visibleDurationSeconds: number;
+};
+
 export type TimeSummary = {
   label: string;
   ownTimeSeconds: number;
   rolledUpTimeSeconds: number;
+  visibleLogEntries: TimeLogEntry[];
   visibleLogs: TodoSummary['timeLogs'];
 };
 
@@ -34,16 +44,26 @@ export function summarizeTodoTime(
   selection: TimeRangeSelection,
   now: Date,
 ): TimeSummary {
+  const bounds = timeRangeBounds(selection, now);
+  const todoById = new Map(allTodos.map((item) => [item.id, item]));
+  const visibleLogEntries = collectVisibleLogEntries(
+    todo,
+    todoById,
+    bounds,
+    now,
+    selection.mode === 'overall',
+  );
+
   if (selection.mode === 'overall') {
     return {
       label: 'Overall',
       ownTimeSeconds: todo.ownTimeSeconds,
       rolledUpTimeSeconds: todo.rolledUpTimeSeconds,
+      visibleLogEntries,
       visibleLogs: todo.timeLogs,
     };
   }
 
-  const bounds = timeRangeBounds(selection, now);
   const ownTimeSeconds = sumLogsInRange(todo.timeLogs, bounds, now);
 
   return {
@@ -51,6 +71,7 @@ export function summarizeTodoTime(
     ownTimeSeconds,
     rolledUpTimeSeconds:
       ownTimeSeconds + sumDescendantLogsInRange(todo, allTodos, bounds, now),
+    visibleLogEntries,
     visibleLogs: todo.timeLogs.filter((log) => logOverlapSeconds(log, bounds, now) > 0),
   };
 }
@@ -124,6 +145,49 @@ function sumDescendantLogsInRange(
   }, 0);
 }
 
+function collectVisibleLogEntries(
+  todo: TodoSummary,
+  todoById: Map<number, TodoSummary>,
+  bounds: TimeBounds,
+  now: Date,
+  includeAllLogs: boolean,
+  rootTodoId = todo.id,
+  visited = new Set<number>(),
+): TimeLogEntry[] {
+  if (visited.has(todo.id)) {
+    return [];
+  }
+
+  visited.add(todo.id);
+  const ownEntries = todo.timeLogs.flatMap((log) => {
+    const visibleDurationSeconds = includeAllLogs
+      ? log.durationSeconds
+      : logOverlapSeconds(log, bounds, now);
+    if (!includeAllLogs && visibleDurationSeconds <= 0) {
+      return [];
+    }
+
+    return [
+      {
+        isOwnTodo: todo.id === rootTodoId,
+        log,
+        todoDisplayId: todo.displayId,
+        todoId: todo.id,
+        todoTitle: todo.title,
+        visibleDurationSeconds,
+      },
+    ];
+  });
+  const descendantEntries = todo.subtasks.flatMap((subtask) => {
+    const child = todoById.get(subtask.id);
+    return child
+      ? collectVisibleLogEntries(child, todoById, bounds, now, includeAllLogs, rootTodoId, visited)
+      : [];
+  });
+
+  return [...ownEntries, ...descendantEntries].sort(compareTimeLogEntries);
+}
+
 function sumLogsInRange(
   logs: TodoSummary['timeLogs'],
   bounds: TimeBounds,
@@ -169,6 +233,20 @@ function logEndMs(
   }
 
   return startMs + log.durationSeconds * SECOND_MS;
+}
+
+function compareTimeLogEntries(a: TimeLogEntry, b: TimeLogEntry): number {
+  const startedDelta = logStartedAtMs(b.log) - logStartedAtMs(a.log);
+  if (startedDelta !== 0) {
+    return startedDelta;
+  }
+
+  return b.log.id - a.log.id;
+}
+
+function logStartedAtMs(log: TodoSummary['timeLogs'][number]): number {
+  const startedAtMs = new Date(log.startedAt).getTime();
+  return Number.isFinite(startedAtMs) ? startedAtMs : 0;
 }
 
 function parseLocalDateTime(value: string): Date | null {
