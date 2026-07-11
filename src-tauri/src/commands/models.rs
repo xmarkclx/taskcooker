@@ -168,6 +168,8 @@ pub struct CreateProjectCommand {
 #[serde(rename_all = "camelCase")]
 pub struct WorkingDirectoryCommand {
     pub path: String,
+    #[serde(default)]
+    pub terminal_wsl_enabled: bool,
 }
 
 #[derive(Debug, Clone, Deserialize)]

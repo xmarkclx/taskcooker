@@ -27,9 +27,13 @@ export function NewProjectOverlay({
         setNewProjectOpen(false);
         setNewProjectParent(null);
       }}
-      onCreateWorkingDirectory={(path) => createWorkingDirectory({ path })}
+      onCreateWorkingDirectory={(path, options) =>
+        createWorkingDirectory({ path, terminalWslEnabled: options.terminalWslEnabled })
+      }
       onSubmit={onSubmit}
-      onWorkingDirectoryStatus={(path) => getWorkingDirectory({ path })}
+      onWorkingDirectoryStatus={(path, options) =>
+        getWorkingDirectory({ path, terminalWslEnabled: options.terminalWslEnabled })
+      }
       parentProject={newProjectParent ?? undefined}
     />
   );

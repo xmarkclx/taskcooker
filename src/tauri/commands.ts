@@ -258,6 +258,7 @@ export async function recordProjectUse(
 
 export type WorkingDirectoryInput = {
   path: string;
+  terminalWslEnabled?: boolean;
 };
 
 export type ChooseWorkingDirectoryInput = {

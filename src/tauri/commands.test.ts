@@ -237,11 +237,11 @@ describe('Tauri command client', () => {
     };
 
     const status = await getWorkingDirectory(
-      { path: '~/p/new-workspace' },
+      { path: '~/p/new-workspace', terminalWslEnabled: true },
       client,
     );
     const created = await createWorkingDirectory(
-      { path: '~/p/new-workspace' },
+      { path: '~/p/new-workspace', terminalWslEnabled: true },
       client,
     );
 
@@ -250,11 +250,15 @@ describe('Tauri command client', () => {
     expect(calls).toEqual([
       {
         command: 'get_working_directory',
-        args: { input: { path: '~/p/new-workspace' } },
+        args: {
+          input: { path: '~/p/new-workspace', terminalWslEnabled: true },
+        },
       },
       {
         command: 'create_working_directory',
-        args: { input: { path: '~/p/new-workspace' } },
+        args: {
+          input: { path: '~/p/new-workspace', terminalWslEnabled: true },
+        },
       },
     ]);
   });

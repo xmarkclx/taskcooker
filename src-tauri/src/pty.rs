@@ -375,7 +375,9 @@ impl PtyState {
         let (program, args, typed_command) = windows_shell_first_launch(program, args);
         let mut command = CommandBuilder::new(&program);
         command.args(&args);
-        command.cwd(&spec.cwd);
+        if let Some(cwd) = pty_host_cwd_for_spawn(&spec) {
+            command.cwd(cwd);
+        }
         for (key, value) in spawn_environment(&spec.env) {
             command.env(key, value);
         }
@@ -734,6 +736,21 @@ fn pty_command_for_spawn_for_platform(
     }
 
     (program, args)
+}
+
+fn pty_host_cwd_for_spawn(spec: &PtySpawnSpec) -> Option<&str> {
+    pty_host_cwd_for_spawn_for_platform(spec, TerminalLaunchPlatform::current())
+}
+
+fn pty_host_cwd_for_spawn_for_platform(
+    spec: &PtySpawnSpec,
+    platform: TerminalLaunchPlatform,
+) -> Option<&str> {
+    if spec.wsl_enabled && platform == TerminalLaunchPlatform::Windows {
+        None
+    } else {
+        Some(spec.cwd.as_str())
+    }
 }
 
 /// 🐚⌨️ Shell-first launch for native Windows: CreateProcessW can only start
@@ -1392,9 +1409,10 @@ mod tests {
     use super::{
         drain_pending_pty_data, latest_codex_session_id_from_index, powershell_quote,
         pty_command_for_spawn, pty_command_for_spawn_for_platform, pty_data_event_name,
-        pty_exit_event_name, pty_grid_matches, shell_first_launch_for_platform, spawn_environment,
-        typed_shell_command, PtyInputOwner, PtySpawnSpec, TerminalLaunchPlatform,
-        TerminalQueryFilter, DATA_EVENT_BATCH_MAX_BYTES, QUERY_HOLD_MAX, SCROLLBACK_MAX_BYTES,
+        pty_exit_event_name, pty_grid_matches, pty_host_cwd_for_spawn_for_platform,
+        shell_first_launch_for_platform, spawn_environment, typed_shell_command, PtyInputOwner,
+        PtySpawnSpec, TerminalLaunchPlatform, TerminalQueryFilter, DATA_EVENT_BATCH_MAX_BYTES,
+        QUERY_HOLD_MAX, SCROLLBACK_MAX_BYTES,
     };
     use chrono::{TimeZone, Utc};
     use std::fs;
@@ -1689,7 +1707,7 @@ mod tests {
         let spec = PtySpawnSpec {
             program: "codex".to_string(),
             args: vec!["--yolo".to_string(), "Work".to_string()],
-            cwd: r"C:\Users\mark\p\tmatrix".to_string(),
+            cwd: "~/projects/tmatrix".to_string(),
             env: vec![],
             wsl_enabled: true,
             cols: 120,
@@ -1708,12 +1726,16 @@ mod tests {
             args,
             vec![
                 "--cd",
-                r"C:\Users\mark\p\tmatrix",
+                "~/projects/tmatrix",
                 "--",
                 "codex",
                 "--yolo",
                 "Work",
             ]
+        );
+        assert_eq!(
+            pty_host_cwd_for_spawn_for_platform(&spec, TerminalLaunchPlatform::Windows),
+            None
         );
     }
 

@@ -25,9 +25,15 @@ type NewProjectDialogProps = {
   existingProjects: ProjectSummary[];
   onChooseWorkingDirectory?: (currentPath: string) => Promise<string | null>;
   onClose: () => void;
-  onCreateWorkingDirectory: (path: string) => Promise<ProjectActionsDirectorySummary>;
+  onCreateWorkingDirectory: (
+    path: string,
+    options: { terminalWslEnabled: boolean },
+  ) => Promise<ProjectActionsDirectorySummary>;
   onSubmit: (value: NewProjectDialogSubmit) => void;
-  onWorkingDirectoryStatus: (path: string) => Promise<ProjectActionsDirectorySummary>;
+  onWorkingDirectoryStatus: (
+    path: string,
+    options: { terminalWslEnabled: boolean },
+  ) => Promise<ProjectActionsDirectorySummary>;
   parentProject?: ProjectSummary;
 };
 
@@ -63,6 +69,7 @@ export function NewProjectDialog({
   const prefixConflict = usedPrefixes.has(displayIdPrefix.trim().toUpperCase());
   const inheriting = Boolean(parentProject) && inheritParent;
   const showWslTerminalSetting = isWindowsPlatform();
+  const workingDirectoryTerminalWslEnabled = showWslTerminalSetting && terminalWslEnabled;
   const canSubmit =
     name.trim().length > 0 &&
     (inheriting ||
@@ -82,7 +89,9 @@ export function NewProjectDialog({
 
     let active = true;
     setDirectoryStatus({ state: 'checking' });
-    void onWorkingDirectoryStatus(path)
+    void onWorkingDirectoryStatus(path, {
+      terminalWslEnabled: workingDirectoryTerminalWslEnabled,
+    })
       .then((summary) => {
         if (!active) {
           return;
@@ -107,7 +116,12 @@ export function NewProjectDialog({
     return () => {
       active = false;
     };
-  }, [inheriting, onWorkingDirectoryStatus, workingDirectory]);
+  }, [
+    inheriting,
+    onWorkingDirectoryStatus,
+    workingDirectory,
+    workingDirectoryTerminalWslEnabled,
+  ]);
 
   const updateName = (value: string) => {
     setName(value);
@@ -127,7 +141,9 @@ export function NewProjectDialog({
 
     setDirectoryStatus({ state: 'creating' });
     try {
-      const summary = await onCreateWorkingDirectory(path);
+      const summary = await onCreateWorkingDirectory(path, {
+        terminalWslEnabled: workingDirectoryTerminalWslEnabled,
+      });
       setDirectoryStatus({
         state: summary.exists ? 'ready' : 'missing',
         summary,

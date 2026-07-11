@@ -542,8 +542,9 @@ pub fn start_agent_session(
     let working_directory = state
         .todo_working_directory(todo.id)
         .map_err(command_error)?;
-    let working_directory = expand_home_alias(&working_directory).display().to_string();
     let terminal_wsl_active = project_terminal_wsl_active(project.terminal_wsl_enabled);
+    let working_directory =
+        terminal_project_working_directory(&working_directory, terminal_wsl_active)?;
     let process_working_directory = if terminal_wsl_active {
         "."
     } else {
@@ -624,14 +625,15 @@ pub fn start_execution_terminal_from_app(
         .todo_working_directory(todo.id)
         .map_err(command_error)?;
     let terminal_wsl_active = project_terminal_wsl_active(project.terminal_wsl_enabled);
-    let working_directory_path = expand_home_alias(&working_directory);
+    let working_directory =
+        terminal_project_working_directory(&working_directory, terminal_wsl_active)?;
+    let working_directory_path = PathBuf::from(&working_directory);
     if !terminal_wsl_active && !working_directory_path.is_dir() {
         return Err(format!(
             "project folder does not exist: {}",
             working_directory_path.display()
         ));
     }
-    let working_directory = working_directory_path.display().to_string();
     let kind = normalized_execution_terminal_kind(&input.kind)?;
     let conversation_id = if matches!(kind.as_str(), "terminal" | "omp" | "codex" | "claude") {
         None
@@ -1917,6 +1919,18 @@ fn default_shell_process(cwd: &str) -> Result<(String, Vec<String>), String> {
 
 fn project_terminal_wsl_active(terminal_wsl_enabled: bool) -> bool {
     terminal_wsl_enabled && cfg!(windows)
+}
+
+fn terminal_project_working_directory(
+    working_directory: &str,
+    terminal_wsl_active: bool,
+) -> Result<String, String> {
+    let working_directory = required_command_text("working directory", working_directory)?;
+    if terminal_wsl_active {
+        Ok(working_directory)
+    } else {
+        Ok(expand_home_alias(&working_directory).display().to_string())
+    }
 }
 
 fn wsl_default_shell_process_command(cwd: &str) -> ProcessCommandSpec {

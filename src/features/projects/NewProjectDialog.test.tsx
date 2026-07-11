@@ -79,7 +79,9 @@ describe('NewProjectDialog', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Create folder' }));
 
     await waitFor(() => {
-      expect(onCreateWorkingDirectory).toHaveBeenCalledWith('~/p/alpha-api');
+      expect(onCreateWorkingDirectory).toHaveBeenCalledWith('~/p/alpha-api', {
+        terminalWslEnabled: false,
+      });
     });
     expect(
       await screen.findByText('Working directory ready'),
@@ -183,6 +185,10 @@ describe('NewProjectDialog', () => {
   it('shows and submits the WSL terminal option on Windows', async () => {
     vi.spyOn(window.navigator, 'platform', 'get').mockReturnValue('Win32');
     const onSubmit = vi.fn();
+    const onWorkingDirectoryStatus = vi.fn().mockResolvedValue({
+      exists: true,
+      path: '/home/markcl/p/alpha-api',
+    });
 
     render(
       <NewProjectDialog
@@ -190,10 +196,7 @@ describe('NewProjectDialog', () => {
         onClose={() => undefined}
         onCreateWorkingDirectory={vi.fn()}
         onSubmit={onSubmit}
-        onWorkingDirectoryStatus={vi.fn().mockResolvedValue({
-          exists: true,
-          path: '/Users/markcl/p/alpha-api',
-        })}
+        onWorkingDirectoryStatus={onWorkingDirectoryStatus}
       />,
     );
 
@@ -205,6 +208,11 @@ describe('NewProjectDialog', () => {
     await waitFor(() => {
       expect(screen.getByText('Working directory ready')).toBeInTheDocument();
     });
+    await waitFor(() => {
+      expect(onWorkingDirectoryStatus).toHaveBeenCalledWith('~/p/alpha-api', {
+        terminalWslEnabled: true,
+      });
+    });
 
     fireEvent.click(screen.getByRole('button', { name: 'Create Project' }));
 
@@ -212,6 +220,44 @@ describe('NewProjectDialog', () => {
       expect(onSubmit).toHaveBeenCalledWith(
         expect.objectContaining({ terminalWslEnabled: true }),
       );
+    });
+  });
+
+  it('creates the working directory in WSL when the Windows WSL option is checked', async () => {
+    vi.spyOn(window.navigator, 'platform', 'get').mockReturnValue('Win32');
+    const onCreateWorkingDirectory = vi.fn().mockResolvedValue({
+      exists: true,
+      path: '/home/markcl/p/alpha-api',
+    });
+    const onWorkingDirectoryStatus = vi.fn().mockResolvedValue({
+      exists: false,
+      path: '/home/markcl/p/alpha-api',
+    });
+
+    render(
+      <NewProjectDialog
+        existingProjects={existingProjects}
+        onClose={() => undefined}
+        onCreateWorkingDirectory={onCreateWorkingDirectory}
+        onSubmit={vi.fn()}
+        onWorkingDirectoryStatus={onWorkingDirectoryStatus}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText('Project name'), {
+      target: { value: 'Alpha API' },
+    });
+    fireEvent.click(screen.getByLabelText('Run terminals in WSL'));
+
+    expect(
+      await screen.findByText('Working directory not found'),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Create folder' }));
+
+    await waitFor(() => {
+      expect(onCreateWorkingDirectory).toHaveBeenCalledWith('~/p/alpha-api', {
+        terminalWslEnabled: true,
+      });
     });
   });
 
