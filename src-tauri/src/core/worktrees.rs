@@ -75,29 +75,32 @@ impl AppDb {
             AppError::InvalidInput("project working directory has no parent".to_string())
         })?;
         let worktree_path = parent.join(&worktree_name);
-        if worktree_path.exists() {
-            return Err(AppError::InvalidInput(format!(
-                "worktree path already exists: {}",
-                worktree_path.display()
-            )));
-        }
-
-        let output = Command::new("git")
-            .arg("-C")
-            .arg(&project_path)
-            .arg("worktree")
-            .arg("add")
-            .arg("-b")
-            .arg(&worktree_name)
-            .arg(&worktree_path)
-            .arg(&main_branch)
-            .output()
-            .map_err(AppError::from)?;
-        if !output.status.success() {
-            return Err(AppError::InvalidInput(format!(
-                "git worktree add failed: {}",
-                String::from_utf8_lossy(&output.stderr).trim()
-            )));
+        let reused = worktree_path.exists();
+        if reused {
+            if !is_registered_worktree(&project_path, &worktree_path)? {
+                return Err(AppError::InvalidInput(format!(
+                    "path exists but is not a worktree for this project: {}",
+                    worktree_path.display()
+                )));
+            }
+        } else {
+            let output = Command::new("git")
+                .arg("-C")
+                .arg(&project_path)
+                .arg("worktree")
+                .arg("add")
+                .arg("-b")
+                .arg(&worktree_name)
+                .arg(&worktree_path)
+                .arg(&main_branch)
+                .output()
+                .map_err(AppError::from)?;
+            if !output.status.success() {
+                return Err(AppError::InvalidInput(format!(
+                    "git worktree add failed: {}",
+                    String::from_utf8_lossy(&output.stderr).trim()
+                )));
+            }
         }
 
         let path = worktree_path.display().to_string();
@@ -120,7 +123,11 @@ impl AppDb {
         insert_event_tx(
             &tx,
             todo_id,
-            "worktree_created",
+            if reused {
+                "worktree_reused"
+            } else {
+                "worktree_created"
+            },
             &Actor::system("Boomerang"),
             None,
             json!({}),
@@ -247,6 +254,12 @@ impl AppDb {
         let mut conn = self.conn.lock().expect("database lock is not poisoned");
         let tx = conn.transaction()?;
         let now = now_string();
+        let affected = tx
+            .prepare("SELECT id, worktree_name FROM todos WHERE worktree_path = ?1")?
+            .query_map(params![target.worktree_path], |row| {
+                Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?))
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
         let changed = tx.execute(
             "UPDATE todos
                 SET worktree_name = NULL,
@@ -254,29 +267,54 @@ impl AppDb {
                     worktree_created_at = NULL,
                     worktree_merged_at = NULL,
                     updated_at = ?1
-              WHERE id = ?2",
-            params![now, todo_id],
+              WHERE worktree_path = ?2",
+            params![now, target.worktree_path],
         )?;
         if changed == 0 {
             return Err(AppError::InvalidInput(format!("todo not found: {todo_id}")));
         }
-        insert_event_tx(
-            &tx,
-            todo_id,
-            "worktree_deleted",
-            &Actor::system("Boomerang"),
-            None,
-            json!({
-                "worktree_name": target.worktree_name,
-                "worktree_path": target.worktree_path,
-            }),
-            json!({}),
-            None,
-            None,
-        )?;
+        for (affected_todo_id, worktree_name) in affected {
+            insert_event_tx(
+                &tx,
+                affected_todo_id,
+                "worktree_deleted",
+                &Actor::system("Boomerang"),
+                None,
+                json!({
+                    "worktree_name": worktree_name,
+                    "worktree_path": target.worktree_path,
+                }),
+                json!({}),
+                None,
+                None,
+            )?;
+        }
         tx.commit()?;
         Ok(())
     }
+}
+
+fn is_registered_worktree(project_path: &Path, candidate: &Path) -> AppResult<bool> {
+    let output = Command::new("git")
+        .arg("-C")
+        .arg(project_path)
+        .arg("worktree")
+        .arg("list")
+        .arg("--porcelain")
+        .output()
+        .map_err(AppError::from)?;
+    if !output.status.success() {
+        return Err(AppError::InvalidInput(format!(
+            "git worktree list failed: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        )));
+    }
+    let candidate = candidate.canonicalize().map_err(AppError::from)?;
+    Ok(String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .filter_map(|line| line.strip_prefix("worktree "))
+        .filter_map(|path| Path::new(path).canonicalize().ok())
+        .any(|path| path == candidate))
 }
 
 pub(super) fn worktree_branch_name(value: &str) -> AppResult<String> {

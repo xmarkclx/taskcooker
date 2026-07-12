@@ -417,6 +417,39 @@ fn todo_worktree_creation_is_one_way_and_updates_the_snapshot() {
 }
 
 #[test]
+fn todo_can_reuse_an_existing_worktree_from_the_same_project() {
+    let db = new_db();
+    let (_temp, project_id) = git_project_fixture(&db);
+    let parent = db.create_todo(project_id, "Parent work").unwrap();
+    let child = db.create_todo(project_id, "Child work").unwrap();
+    let parent_worktree = db.enable_todo_worktree(parent.id, "T-1").unwrap();
+
+    let child_worktree = db.enable_todo_worktree(child.id, "T-1").unwrap();
+
+    assert_eq!(child_worktree.path, parent_worktree.path);
+    assert_eq!(
+        db.todo_working_directory(child.id).unwrap(),
+        parent_worktree.path
+    );
+}
+
+#[test]
+fn deleting_a_shared_todo_worktree_removes_it_from_every_referencing_task() {
+    let db = new_db();
+    let (_temp, project_id) = git_project_fixture(&db);
+    let parent = db.create_todo(project_id, "Parent work").unwrap();
+    let child = db.create_todo(project_id, "Child work").unwrap();
+    let worktree = db.enable_todo_worktree(parent.id, "T-1").unwrap();
+    db.enable_todo_worktree(child.id, "T-1").unwrap();
+
+    db.delete_todo_worktree(child.id).unwrap();
+
+    assert!(!std::path::Path::new(&worktree.path).exists());
+    assert_ne!(db.todo_working_directory(parent.id).unwrap(), worktree.path);
+    assert_ne!(db.todo_working_directory(child.id).unwrap(), worktree.path);
+}
+
+#[test]
 fn task_working_directory_falls_back_to_the_project_directory_until_worktree_exists() {
     let db = new_db();
     let (_temp, project_id) = git_project_fixture(&db);
@@ -524,6 +557,27 @@ fn successful_worktree_merge_terminal_marks_the_todo_worktree_merged() {
     let after =
         serde_json::to_value(db.app_snapshot(Some(project_id), Some(todo.id)).unwrap()).unwrap();
     assert!(after["todos"][0]["worktreeMergedAt"].as_str().is_some());
+}
+
+#[test]
+fn successful_shared_worktree_merge_marks_every_referencing_task_merged() {
+    let db = new_db();
+    let (_temp, project_id) = git_project_fixture(&db);
+    let parent = db.create_todo(project_id, "Parent work").unwrap();
+    let child = db.create_todo(project_id, "Child work").unwrap();
+    db.enable_todo_worktree(parent.id, "T-1").unwrap();
+    db.enable_todo_worktree(child.id, "T-1").unwrap();
+    db.record_execution_terminal(child.id, 9003, "worktree_merge", "Commit & Merge")
+        .unwrap();
+
+    db.finish_execution_terminal_for_pty(9003, 0).unwrap();
+
+    let snapshot = db.app_snapshot(Some(project_id), Some(child.id)).unwrap();
+    assert!(snapshot
+        .todos
+        .iter()
+        .filter(|todo| todo.id == parent.id || todo.id == child.id)
+        .all(|todo| todo.worktree_merged_at.is_some()));
 }
 
 #[test]

@@ -52,25 +52,34 @@ impl AppDb {
             params![state, exit_code, now, pty_id],
         )?;
         if kind == "worktree_merge" && exit_code == 0 {
-            let previous_merged_at = tx
+            let worktree_path = tx
                 .query_row(
-                    "SELECT worktree_merged_at FROM todos WHERE id = ?1 AND worktree_name IS NOT NULL",
+                    "SELECT worktree_path FROM todos WHERE id = ?1",
                     params![todo_id],
                     |row| row.get::<_, Option<String>>(0),
                 )
                 .optional()?
                 .flatten();
-            let changed = tx.execute(
+            let affected = if let Some(worktree_path) = worktree_path.as_deref() {
+                tx.prepare("SELECT id, worktree_merged_at FROM todos WHERE worktree_path = ?1")?
+                    .query_map(params![worktree_path], |row| {
+                        Ok((row.get::<_, i64>(0)?, row.get::<_, Option<String>>(1)?))
+                    })?
+                    .collect::<Result<Vec<_>, _>>()?
+            } else {
+                Vec::new()
+            };
+            tx.execute(
                 "UPDATE todos
                     SET worktree_merged_at = ?1,
                         updated_at = ?1
-                  WHERE id = ?2 AND worktree_name IS NOT NULL",
-                params![now, todo_id],
+                  WHERE worktree_path = ?2",
+                params![now, worktree_path],
             )?;
-            if changed > 0 {
+            for (affected_todo_id, previous_merged_at) in affected {
                 insert_event_tx(
                     &tx,
-                    todo_id,
+                    affected_todo_id,
                     "worktree_merged",
                     &Actor::system("Boomerang"),
                     None,
