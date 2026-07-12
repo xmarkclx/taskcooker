@@ -1590,12 +1590,29 @@ pub fn build_execution_process_command(
 pub fn build_worktree_diff_process_command(
     worktree_dir: &str,
     main_branch: &str,
+    platform: WorktreeCommandPlatform,
 ) -> Result<ProcessCommandSpec, String> {
     let worktree_dir = required_command_text("worktree directory", worktree_dir)?;
     let main_branch = required_command_text("main branch", main_branch)?;
     let worktree_dir = expand_home_alias(&worktree_dir).display().to_string();
     let diff_range = format!("{main_branch}..HEAD");
-    let script = [
+    if platform == WorktreeCommandPlatform::WindowsPowerShell {
+        let script = [
+            powershell_git_function(),
+            format!(
+                "Write-Output {}",
+                powershell_script_arg(&format!("Diff range: {diff_range}"))
+            ),
+            format!(
+                "Invoke-Git -C {} diff {}",
+                powershell_script_arg(&worktree_dir),
+                powershell_script_arg(&diff_range)
+            ),
+        ]
+        .join("\n");
+        return Ok(powershell_process_command(worktree_dir, script));
+    }
+    let commands = [
         "set -euo pipefail".to_string(),
         format!(
             "echo {}",
@@ -1606,11 +1623,12 @@ pub fn build_worktree_diff_process_command(
             shell_script_arg(&worktree_dir),
             shell_script_arg(&diff_range)
         ),
-    ]
-    .join("\n");
+    ];
+    let display = commands.join("\n");
+    let script = commands.join("; ");
 
     Ok(ProcessCommandSpec {
-        display: script.clone(),
+        display,
         program: "bash".to_string(),
         args: vec!["-lc".to_string(), script],
         cwd: worktree_dir,
@@ -1623,6 +1641,7 @@ pub fn build_worktree_merge_process_command(
     worktree_branch: &str,
     main_branch: &str,
     commit_message: &str,
+    platform: WorktreeCommandPlatform,
 ) -> Result<ProcessCommandSpec, String> {
     let project_dir = required_command_text("project directory", project_dir)?;
     let worktree_dir = required_command_text("worktree directory", worktree_dir)?;
@@ -1633,7 +1652,27 @@ pub fn build_worktree_merge_process_command(
     let worktree_dir = expand_home_alias(&worktree_dir).display().to_string();
     let no_upstream_message =
         format!("No upstream configured for {main_branch}; using local {main_branch}.");
-    let script = [
+    if platform == WorktreeCommandPlatform::WindowsPowerShell {
+        let project = powershell_script_arg(&project_dir);
+        let worktree = powershell_script_arg(&worktree_dir);
+        let branch = powershell_script_arg(&worktree_branch);
+        let main = powershell_script_arg(&main_branch);
+        let message = powershell_script_arg(&commit_message);
+        let script = [
+            powershell_git_function(),
+            format!("Invoke-Git -C {worktree} add -A"),
+            format!("& git -C {worktree} diff --cached --quiet; if ($LASTEXITCODE -eq 1) {{ Invoke-Git -C {worktree} commit -m {message} }} elseif ($LASTEXITCODE -ne 0) {{ exit $LASTEXITCODE }} else {{ Write-Output 'No staged changes to commit.' }}"),
+            format!("Invoke-Git -C {project} fetch --all --prune"),
+            format!("Invoke-Git -C {project} checkout {main}"),
+            format!("& git -C {project} rev-parse --abbrev-ref --symbolic-full-name '@{{u}}' *> $null; if ($LASTEXITCODE -eq 0) {{ Invoke-Git -C {project} pull --ff-only }} else {{ Write-Output {} }}", powershell_script_arg(&no_upstream_message)),
+            format!("Invoke-Git -C {worktree} rebase {main}"),
+            format!("Invoke-Git -C {project} merge --squash --ff {branch}"),
+            format!("& git -C {project} diff --cached --quiet; if ($LASTEXITCODE -eq 1) {{ Invoke-Git -C {project} commit -m {message} }} elseif ($LASTEXITCODE -ne 0) {{ exit $LASTEXITCODE }} else {{ Write-Output 'No squash changes to commit.' }}"),
+        ]
+        .join("\n");
+        return Ok(powershell_process_command(project_dir, script));
+    }
+    let commands = [
         "set -euo pipefail".to_string(),
         format!("git -C {} add -A", shell_script_arg(&worktree_dir)),
         format!(
@@ -1670,11 +1709,12 @@ pub fn build_worktree_merge_process_command(
             shell_script_arg(&project_dir),
             shell_script_arg(&commit_message)
         ),
-    ]
-    .join("\n");
+    ];
+    let display = commands.join("\n");
+    let script = commands.join("; ");
 
     Ok(ProcessCommandSpec {
-        display: script.clone(),
+        display,
         program: "bash".to_string(),
         args: vec!["-lc".to_string(), script],
         cwd: project_dir,
@@ -1689,6 +1729,31 @@ fn shell_script_arg(value: &str) -> String {
     }
 
     format!("'{}'", value.replace('\'', "'\"'\"'"))
+}
+
+fn powershell_git_function() -> String {
+    "function Invoke-Git { & git @args; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE } }"
+        .to_string()
+}
+
+fn powershell_script_arg(value: &str) -> String {
+    format!("'{}'", value.replace('\'', "''"))
+}
+
+fn powershell_process_command(cwd: String, script: String) -> ProcessCommandSpec {
+    ProcessCommandSpec {
+        display: script.clone(),
+        program: crate::pty::windows_terminal_shell_path()
+            .display()
+            .to_string(),
+        args: vec![
+            "-NoLogo".to_string(),
+            "-NoProfile".to_string(),
+            "-Command".to_string(),
+            script,
+        ],
+        cwd,
+    }
 }
 
 fn agent_prompt_with_session_context(

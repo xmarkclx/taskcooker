@@ -75,7 +75,11 @@ pub fn open_todo_worktree_diff(
     let target = state
         .todo_worktree_target(input.todo_id)
         .map_err(command_error)?;
-    let process = build_worktree_diff_process_command(&target.worktree_path, &target.main_branch)?;
+    let process = build_worktree_diff_process_command(
+        &target.worktree_path,
+        &target.main_branch,
+        WorktreeCommandPlatform::current(target.terminal_wsl_enabled),
+    )?;
     let pty_id = pty.spawn_process(
         &app,
         PtySpawnSpec {
@@ -130,6 +134,7 @@ pub fn commit_and_merge_todo_worktree(
         &target.worktree_name,
         &target.main_branch,
         &message,
+        WorktreeCommandPlatform::current(target.terminal_wsl_enabled),
     )?;
     let pty_id = pty.spawn_process(
         &app,

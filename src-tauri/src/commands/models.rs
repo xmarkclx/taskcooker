@@ -11,6 +11,30 @@ pub struct ProcessCommandSpec {
     pub display: String,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WorktreeCommandPlatform {
+    WindowsPowerShell,
+    Wsl2,
+    MacOs,
+    Linux,
+}
+
+impl WorktreeCommandPlatform {
+    pub fn current(wsl_enabled: bool) -> Self {
+        if cfg!(windows) {
+            if wsl_enabled {
+                Self::Wsl2
+            } else {
+                Self::WindowsPowerShell
+            }
+        } else if cfg!(target_os = "macos") {
+            Self::MacOs
+        } else {
+            Self::Linux
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum FolderOpenCommandSpec {
     System { path: String, app: Option<String> },

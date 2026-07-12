@@ -33,6 +33,7 @@ use boomerang_tasks_lib::commands::{
     UpdateAppSettingsCommand, UpdateProjectNotesCommand, UpdateProjectPromptSettingsCommand,
     UpdateProjectSettingsCommand, UpdateTodoArtifactCommand, UpdateTodoPriorityCommand,
     UpdateTodoStateCommand, UpdateTodoTitleCommand, UpdateTodosStateCommand,
+    WorktreeCommandPlatform,
 };
 use boomerang_tasks_lib::core::{
     AppDb, AppSettingsSummary, NewProject, ProjectActionArgument, ProjectActionSummary, TodoState,
@@ -986,13 +987,19 @@ fn worktree_name_suggestion_uses_next_suffix_when_task_id_path_exists() {
 
 #[test]
 fn worktree_diff_and_merge_process_commands_use_the_project_main_branch() {
-    let diff = build_worktree_diff_process_command("/tmp/tmatrix-T-1", "main").unwrap();
+    let diff = build_worktree_diff_process_command(
+        "/tmp/tmatrix-T-1",
+        "main",
+        WorktreeCommandPlatform::Linux,
+    )
+    .unwrap();
     let merge = build_worktree_merge_process_command(
         "/tmp/tmatrix",
         "/tmp/tmatrix-T-1",
         "T-1-worktrees-support",
         "main",
         "T-1 Worktrees Support",
+        WorktreeCommandPlatform::Linux,
     )
     .unwrap();
 
@@ -1003,8 +1010,16 @@ fn worktree_diff_and_merge_process_commands_use_the_project_main_branch() {
         .display
         .contains("git -C /tmp/tmatrix-T-1 diff main..HEAD"));
     assert!(!diff.display.contains("lazygit"));
+    assert!(diff
+        .args
+        .iter()
+        .all(|argument| !argument.contains(['\r', '\n'])));
     assert_eq!(merge.program, "bash");
     assert_eq!(merge.cwd, "/tmp/tmatrix");
+    assert!(merge
+        .args
+        .iter()
+        .all(|argument| !argument.contains(['\r', '\n'])));
     assert!(merge.display.contains("git -C /tmp/tmatrix-T-1 add -A"));
     assert!(merge
         .display
@@ -1018,13 +1033,19 @@ fn worktree_process_commands_expand_home_aliases_for_git_paths() {
     let home = PathBuf::from(std::env::var("HOME").expect("HOME is set for path expansion tests"));
     let project_dir = home.join("p/tmatrix").display().to_string();
     let worktree_dir = home.join("p/tmatrix-T-1").display().to_string();
-    let diff = build_worktree_diff_process_command("~/p/tmatrix-T-1", "main").unwrap();
+    let diff = build_worktree_diff_process_command(
+        "~/p/tmatrix-T-1",
+        "main",
+        WorktreeCommandPlatform::Linux,
+    )
+    .unwrap();
     let merge = build_worktree_merge_process_command(
         "~/p/tmatrix",
         "~/p/tmatrix-T-1",
         "T-1-worktrees-support",
         "main",
         "T-1 Worktrees Support",
+        WorktreeCommandPlatform::Linux,
     )
     .unwrap();
 
@@ -1047,6 +1068,7 @@ fn worktree_merge_process_rebases_worktree_on_main_before_squash_merging() {
         "T-1-worktrees-support",
         "main",
         "T-1 Worktrees Support",
+        WorktreeCommandPlatform::Linux,
     )
     .unwrap();
 
@@ -1065,6 +1087,39 @@ fn worktree_merge_process_rebases_worktree_on_main_before_squash_merging() {
         .expect("worktree branch is squash merged back to main");
     assert!(rebase_index < merge_index);
     assert!(merge.display.contains("git -C /tmp/tmatrix commit -m"));
+}
+
+#[test]
+fn worktree_commands_use_native_powershell_on_windows() {
+    let merge = build_worktree_merge_process_command(
+        r"E:\taskcooker",
+        r"E:\T-1",
+        "T-1",
+        "main",
+        "T-1 Fix Windows merge",
+        WorktreeCommandPlatform::WindowsPowerShell,
+    )
+    .unwrap();
+
+    let program = merge.program.to_ascii_lowercase();
+    assert!(program.ends_with("powershell.exe") || program.ends_with("pwsh.exe"));
+    assert!(merge.args.iter().any(|argument| argument == "-Command"));
+    assert!(merge.display.contains("$LASTEXITCODE"));
+    assert!(!merge.display.contains("if ! git"));
+    assert!(!merge.display.contains("; then"));
+}
+
+#[test]
+fn worktree_commands_select_bash_for_each_unix_environment() {
+    for platform in [
+        WorktreeCommandPlatform::Wsl2,
+        WorktreeCommandPlatform::MacOs,
+        WorktreeCommandPlatform::Linux,
+    ] {
+        let diff = build_worktree_diff_process_command("/worktree", "main", platform).unwrap();
+        assert_eq!(diff.program, "bash");
+        assert_eq!(diff.args.first().map(String::as_str), Some("-lc"));
+    }
 }
 
 #[test]

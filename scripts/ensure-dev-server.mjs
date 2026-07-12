@@ -2,6 +2,8 @@
 
 import { spawn } from 'node:child_process';
 import net from 'node:net';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const DEFAULT_HOST = '127.0.0.1';
 const DEFAULT_PORT = 1420;
@@ -9,6 +11,27 @@ const DEV_SERVER_KEEPALIVE_MS = 60_000;
 
 export function buildViteArgs({ host, port }) {
   return ['run', 'dev', '--', '--host', host, '--port', String(port), '--strictPort'];
+}
+
+export function buildDirectViteArgs({ host, port }) {
+  return ['--host', host, '--port', String(port), '--strictPort'];
+}
+
+export function buildViteLaunch({ nodeExecutable, viteCli }) {
+  return {
+    program: nodeExecutable,
+    prefixArgs: [viteCli],
+  };
+}
+
+export function isMainModule({ moduleUrl, argvPath, platform = process.platform }) {
+  if (!argvPath) return false;
+
+  const modulePath = path.resolve(fileURLToPath(moduleUrl));
+  const entryPath = path.resolve(argvPath);
+  return platform === 'win32'
+    ? modulePath.toLowerCase() === entryPath.toLowerCase()
+    : modulePath === entryPath;
 }
 
 export async function classifyExistingDevServer({ fetchImpl = fetch, url }) {
@@ -77,7 +100,11 @@ async function main() {
     return;
   }
 
-  const child = spawn('npm', buildViteArgs({ host, port }), {
+  const launch = buildViteLaunch({
+    nodeExecutable: process.execPath,
+    viteCli: fileURLToPath(new URL('../node_modules/vite/bin/vite.js', import.meta.url)),
+  });
+  const child = spawn(launch.program, [...launch.prefixArgs, ...buildDirectViteArgs({ host, port })], {
     env: {
       ...process.env,
       BROWSER: 'none',
@@ -93,6 +120,11 @@ async function main() {
 
   process.once('SIGINT', stopChild);
   process.once('SIGTERM', stopChild);
+
+  child.once('error', (error) => {
+    console.error(`Could not start the TaskCooker dev server: ${error.message}`);
+    process.exitCode = 1;
+  });
 
   child.once('exit', (code, signal) => {
     if (signal) {
@@ -118,6 +150,6 @@ function keepAliveUntilStopped() {
   });
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (isMainModule({ moduleUrl: import.meta.url, argvPath: process.argv[1] })) {
   await main();
 }
