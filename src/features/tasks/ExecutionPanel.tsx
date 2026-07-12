@@ -61,6 +61,8 @@ type ExecutionPanelProps = {
   onOpenExternalTerminal: (ptyId: number) => Promise<void>;
   onCopyArtifactLink: () => void;
   onCopyPrompt: () => void;
+  onOpenFolder: () => void;
+  openFolderDisabled?: boolean;
   onOpenImage?: (src: string) => void;
   onOpenArtifact: () => void;
   onOpenWorktreeDiff: () => Promise<void | ExecutionTerminalSummary>;
@@ -111,6 +113,8 @@ export function ExecutionPanel({
   onOpenExternalTerminal,
   onCopyArtifactLink,
   onCopyPrompt,
+  onOpenFolder,
+  openFolderDisabled = false,
   onOpenImage,
   onOpenArtifact,
   onOpenWorktreeDiff,
@@ -581,6 +585,15 @@ export function ExecutionPanel({
           variant="toolbar"
         >
           <ClipboardCopy size={15} /> Prompt
+        </AppButton>
+        <AppButton
+          aria-label="Open Folder"
+          disabled={!canStart || openFolderDisabled}
+          onClick={onOpenFolder}
+          title="Open project folder"
+          variant="toolbar"
+        >
+          <FolderOpen size={15} /> Open Folder
         </AppButton>
         {!hasWorktree ? (
           <AppButton

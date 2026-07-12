@@ -112,7 +112,8 @@ describe('ExecutionPanel', () => {
   });
 
   it('keeps execution launch actions compact and puts new terminal beside the tabs', () => {
-    const { container } = renderPanel();
+    const onOpenFolder = vi.fn();
+    const { container } = renderPanel([], { onOpenFolder });
 
     const tablist = screen.getByRole('tablist', { name: 'Execution terminals' });
     const newTerminalButton = within(tablist).getByRole('button', {
@@ -128,6 +129,15 @@ describe('ExecutionPanel', () => {
     expect(screen.queryByRole('button', { name: 'Claude Code' })).not.toBeInTheDocument();
     expect(promptButton).toHaveTextContent('Prompt');
     expect(promptButton).toHaveAttribute('title', 'Copy Agent Prompt');
+
+    const toolbar = screen.getByRole('toolbar', { name: 'Execution launch actions' });
+    const openFolderButton = within(toolbar).getByRole('button', { name: 'Open Folder' });
+    expect(
+      promptButton.compareDocumentPosition(openFolderButton) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+
+    fireEvent.click(openFolderButton);
+    expect(onOpenFolder).toHaveBeenCalledOnce();
   });
 
   it('places terminal tabs on the left edge of the execution surface', () => {
@@ -897,6 +907,7 @@ function defaultPanelProps(overrides: Partial<ComponentProps<typeof ExecutionPan
     onOpenExternalTerminal: vi.fn(),
     onCopyArtifactLink: vi.fn(),
     onCopyPrompt: vi.fn(),
+    onOpenFolder: vi.fn(),
     onOpenArtifact: vi.fn(),
     onOpenWorktreeDiff: vi.fn(),
     onDeleteWorktree: vi.fn().mockResolvedValue(undefined),

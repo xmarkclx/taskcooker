@@ -14,7 +14,7 @@ import { resolve } from 'node:path';
 import type { ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { seedSnapshot } from '../data/seed';
+import { emptySnapshot, seedSnapshot } from '../data/seed';
 import type { AppSnapshot } from '../domain/domain';
 import { AUTOSAVE_DEBOUNCE_MS } from '../features/markdown/MarkdownEditor';
 import { loadRecentRemoteServers } from '../features/remote/remoteServers';
@@ -576,17 +576,7 @@ describe('Boomerang app shell', () => {
   });
 
   it('shows first-run creation actions when the database is empty', async () => {
-    vi.spyOn(tauriCommands, 'loadAppSnapshot').mockResolvedValue({
-      boomerangBinaryPath: 'boomerang',
-      executionTerminals: [],
-      messages: [],
-      projects: [],
-      runningTimer: null,
-      selectedProjectId: 0,
-      selectedTodoId: 0,
-      sessions: [],
-      todos: [],
-    });
+    vi.spyOn(tauriCommands, 'loadAppSnapshot').mockResolvedValue(emptySnapshot);
 
     renderApp();
 
@@ -598,6 +588,27 @@ describe('Boomerang app shell', () => {
     expect(
       await screen.findByRole('dialog', { name: /new project/i }),
     ).toBeInTheDocument();
+  });
+
+  it('does not flash the tmatrix demo project while the first snapshot loads', async () => {
+    // Keep the real snapshot pending so the React Query placeholder is what
+    // the user sees on first paint (slow Windows cold starts make this obvious).
+    vi.spyOn(tauriCommands, 'loadAppSnapshot').mockImplementation(
+      () => new Promise(() => {}),
+    );
+    vi.spyOn(tauriCommands, 'loadAppSettings').mockResolvedValue(
+      tauriCommands.fallbackAppSettings,
+    );
+
+    renderApp();
+
+    expect(
+      await screen.findByRole('button', { name: 'Create Project' }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByLabelText(/select project: tmatrix/i),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText('tmatrix')).not.toBeInTheDocument();
   });
 
   it('does not borrow task terminals from another project when the selected project has no tasks', async () => {

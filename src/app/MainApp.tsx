@@ -22,7 +22,7 @@ import type {
   TodoState,
   TodoSummary,
 } from '../domain/domain';
-import { seedSnapshot } from '../data/seed';
+import { emptySnapshot } from '../data/seed';
 import {
   acceptTodoDone,
   addExecutionTerminalLocally,
@@ -238,12 +238,14 @@ export function MainApp() {
   useAppEventBridge(queryClient, showToast, onTitleGeneration);
 
   const {
-    data: serverSnapshot = seedSnapshot,
+    data: serverSnapshot = emptySnapshot,
     isPlaceholderData: appSnapshotIsPlaceholder,
   } = useQuery({
     queryKey: queryKeys.appSnapshot(),
     queryFn: () => loadAppSnapshot(),
-    placeholderData: seedSnapshot,
+    // Never flash the demo "tmatrix" seed — that was only for browser preview /
+    // tests. A slow first paint (common on Windows cold start) must look empty.
+    placeholderData: emptySnapshot,
     // Tauri events (`todos:changed` etc.) drive freshness; polling is only a
     // safety net. A short interval multiplied across many open windows was a
     // constant source of full-snapshot refetch churn.

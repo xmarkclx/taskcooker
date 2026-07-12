@@ -1,5 +1,18 @@
 import type { AppSnapshot, TodoSummary } from '../domain/domain';
 
+/** Empty board shown while the real snapshot loads (and on a fresh install). */
+export const emptySnapshot: AppSnapshot = {
+  boomerangBinaryPath: 'boomerang',
+  executionTerminals: [],
+  messages: [],
+  projects: [],
+  runningTimer: null,
+  selectedProjectId: 0,
+  selectedTodoId: 0,
+  sessions: [],
+  todos: [],
+};
+
 export const seedSnapshot: AppSnapshot = {
   selectedProjectId: 1,
   selectedTodoId: 128,

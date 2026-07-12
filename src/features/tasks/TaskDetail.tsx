@@ -228,6 +228,9 @@ export const TaskDetail = memo(function TaskDetail({
   const [customRangeStart, setCustomRangeStart] = useState('');
   const [customRangeEnd, setCustomRangeEnd] = useState('');
   const [taskActionsMenuOpen, setTaskActionsMenuOpen] = useState(false);
+  const openFolderAction = projectActions.find(
+    (action) => action.fileName === 'boomerang:open-folder',
+  );
   const taskActionsMenuRef = useRef<HTMLSpanElement>(null);
   const [descriptionDragState, setDescriptionDragState] = useState<{
     startWidth: number;
@@ -668,6 +671,12 @@ export const TaskDetail = memo(function TaskDetail({
                     : undefined
                 }
                 onCopyPrompt={onCopyPrompt}
+                onOpenFolder={() => {
+                  if (openFolderAction) {
+                    void onRunTaskAction(openFolderAction);
+                  }
+                }}
+                openFolderDisabled={Boolean(openFolderAction?.validationError)}
                 onPromptSettingsChange={onProjectPromptSettingsChange}
                 onArtifactTocHiddenChange={onArtifactTocHiddenChange}
                 onArtifactTocWidthChange={onArtifactTocWidthChange}
