@@ -6,6 +6,7 @@
   "packageManager": "pnpm@10.15.1",
   "scripts": {
     "dev": "vite",
+    "dev:prod-db": "tauri dev --config src-tauri/tauri.release.conf.json",
     "build": "tsc && vite build",
     "install:app": "scripts/install-app.sh",
     "preview": "vite preview",

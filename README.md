@@ -40,6 +40,14 @@ pnpm tauri dev
 
 `pnpm tauri dev` starts the Vite dev server (via `scripts/ensure-dev-server.mjs`) and launches the desktop shell with hot reload. The dev build uses its own bundle identifier (`com.marklopez.boomerangtasks.dev`), so it never touches the data of an installed production app.
 
+To run the development shell against the installed production app's data, use:
+
+```bash
+pnpm dev:prod-db
+```
+
+This command applies the production identity (`com.marklopez.boomerangtasks`) while retaining Tauri's development mode and hot reload. It reads and writes the real production database and app-data files. Close the installed production app first so two app processes do not operate on the same data concurrently.
+
 Frontend-only iteration without the desktop shell:
 
 ```bash
