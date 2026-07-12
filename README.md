@@ -8,7 +8,7 @@ I was running 20 to 40 terminal tabs across different worktrees. Burned out, anx
 
 There had to be a better way to get things done in the agentic world.
 
-Somethng where we focus on what matters, the task, instead of prompts.
+Something where we focus on what matters, the task, instead of prompts.
 
 TaskCooker is that better way.  It’s free, it’s open source, and it runs on any AI subscription you already have, like Claude Code.
 
