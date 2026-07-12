@@ -146,6 +146,14 @@ describe('MarkdownEditor', () => {
     });
   });
 
+  it('treats unitless markdown editor font sizes as pixels', () => {
+    expect(markdownEditorTypographyStyle('sans-serif', '14')).toEqual({
+      '--markdown-editor-font-family': 'sans-serif',
+      '--markdown-editor-font-size': '14px',
+      '--markdown-editor-max-image-height': 'none',
+    });
+  });
+
   it('defaults blank and invalid markdown editor font sizes to 12px', () => {
     expect(markdownEditorTypographyStyle('sans-serif', '')).toEqual({
       '--markdown-editor-font-family': 'sans-serif',

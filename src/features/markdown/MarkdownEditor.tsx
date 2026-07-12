@@ -1161,6 +1161,9 @@ function validMarkdownEditorFontSize(fontSize: string): string {
   if (!value) {
     return DEFAULT_MARKDOWN_EDITOR_FONT_SIZE;
   }
+  if (/^(?:\d+(?:\.\d+)?|\.\d+)$/.test(value)) {
+    return `${value}px`;
+  }
 
   if (typeof CSS !== 'undefined' && typeof CSS.supports === 'function') {
     if (CSS.supports('font-size', value)) {
