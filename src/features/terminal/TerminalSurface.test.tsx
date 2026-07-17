@@ -1,12 +1,14 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { getDefaultStore } from 'jotai';
 import { readFileSync } from 'node:fs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { TerminalSurface } from './TerminalSurface';
 import { openExternalUrl, openPathOrUrl, saveEditorImage } from '../../tauri/commands';
 import { attachPty } from './ptyBridge';
+import { terminalWindowFocusRestoreNonceAtom } from './terminalFocusState';
 
-const appStyles = readFileSync('src/styles.css', 'utf8');
+const appStyles = readFileSync('src/styles.css', 'utf8').replace(/\r\n/g, '\n');
 const fitAddonMock = vi.hoisted(() => ({
   instances: [] as Array<{
     fit: ReturnType<typeof vi.fn>;
@@ -15,8 +17,11 @@ const fitAddonMock = vi.hoisted(() => ({
 }));
 const terminalMock = vi.hoisted(() => ({
   instances: [] as Array<{
+    blur: ReturnType<typeof vi.fn>;
     customKeyHandler?: (event: KeyboardEvent) => boolean;
     dispose: ReturnType<typeof vi.fn>;
+    focus: ReturnType<typeof vi.fn>;
+    helper?: HTMLTextAreaElement;
     lineText: string;
     linkProviders: Array<{
       provideLinks: (line: number, callback: (links: unknown[] | undefined) => void) => void;
@@ -48,6 +53,20 @@ const webviewMock = vi.hoisted(() => {
       handlers.push(handler);
       return Promise.resolve(vi.fn());
     }),
+  };
+});
+const appWindowMock = vi.hoisted(() => {
+  const focusHandlers: Array<(event: { payload: boolean }) => void> = [];
+  const unlisten = vi.fn();
+  return {
+    focusHandlers,
+    hasDocumentFocus: true,
+    isTauriRuntime: false,
+    onFocusChanged: vi.fn((handler: (event: { payload: boolean }) => void) => {
+      focusHandlers.push(handler);
+      return Promise.resolve(unlisten);
+    }),
+    unlisten,
   };
 });
 
@@ -105,8 +124,11 @@ vi.mock('@xterm/addon-web-links', () => ({
 vi.mock('@xterm/xterm', () => ({
   Terminal: class Terminal {
     instance!: {
+      blur: ReturnType<typeof vi.fn>;
       customKeyHandler?: (event: KeyboardEvent) => boolean;
       dispose: ReturnType<typeof vi.fn>;
+      focus: ReturnType<typeof vi.fn>;
+      helper?: HTMLTextAreaElement;
       lineText: string;
       linkProviders: Array<{
         provideLinks: (line: number, callback: (links: unknown[] | undefined) => void) => void;
@@ -116,6 +138,9 @@ vi.mock('@xterm/xterm', () => ({
       options: Record<string, unknown>;
       write: ReturnType<typeof vi.fn>;
     };
+    blur = vi.fn(() => {
+      this.instance.helper?.blur();
+    });
     cols = 80;
     buffer = {
       active: {
@@ -131,6 +156,9 @@ vi.mock('@xterm/xterm', () => ({
       this.instance.customKeyHandler = handler;
     });
     dispose = vi.fn();
+    focus = vi.fn(() => {
+      this.instance.helper?.focus();
+    });
     loadAddon = vi.fn((addon: { activate?: (terminal: unknown) => void }) => {
       addon.activate?.(this);
     });
@@ -169,7 +197,9 @@ vi.mock('@xterm/xterm', () => ({
       this.cols = Number(options.cols ?? this.cols);
       this.rows = Number(options.rows ?? this.rows);
       this.instance = {
+        blur: this.blur,
         dispose: this.dispose,
+        focus: this.focus,
         lineText: '',
         linkProviders: [],
         options,
@@ -181,10 +211,14 @@ vi.mock('@xterm/xterm', () => ({
     open(container: HTMLElement) {
       const terminal = document.createElement('div');
       terminal.className = 'xterm';
+      const helper = document.createElement('textarea');
+      helper.className = 'xterm-helper-textarea';
       const viewport = document.createElement('div');
       viewport.className = 'xterm-viewport';
+      terminal.append(helper);
       terminal.append(viewport);
       container.append(terminal);
+      this.instance.helper = helper;
     }
   },
 }));
@@ -193,6 +227,16 @@ vi.mock('@tauri-apps/api/webview', () => ({
   getCurrentWebview: () => ({
     onDragDropEvent: webviewMock.onDragDropEvent,
   }),
+}));
+
+vi.mock('@tauri-apps/api/window', () => ({
+  getCurrentWindow: () => ({
+    onFocusChanged: appWindowMock.onFocusChanged,
+  }),
+}));
+
+vi.mock('../../tauri/runtime', () => ({
+  isTauriRuntime: () => appWindowMock.isTauriRuntime,
 }));
 
 vi.mock('../../tauri/commands', () => ({
@@ -205,8 +249,24 @@ vi.mock('./ptyBridge', () => ({
   attachPty: vi.fn(),
 }));
 
+function runAnimationFramesImmediately() {
+  vi.stubGlobal(
+    'requestAnimationFrame',
+    vi.fn((callback: FrameRequestCallback) => {
+      callback(performance.now());
+      return 1;
+    }),
+  );
+  vi.stubGlobal('cancelAnimationFrame', vi.fn());
+}
+
 describe('TerminalSurface', () => {
   beforeEach(() => {
+    getDefaultStore().set(terminalWindowFocusRestoreNonceAtom, 0);
+    appWindowMock.hasDocumentFocus = true;
+    vi.spyOn(document, 'hasFocus').mockImplementation(
+      () => appWindowMock.hasDocumentFocus,
+    );
     vi.stubGlobal('WebGL2RenderingContext', class WebGL2RenderingContext {});
     Object.defineProperty(window, 'ResizeObserver', {
       configurable: true,
@@ -216,6 +276,7 @@ describe('TerminalSurface', () => {
         unobserve = vi.fn();
       },
     });
+    vi.mocked(attachPty).mockClear();
     vi.mocked(attachPty).mockResolvedValue({
       claimInput: vi.fn(),
       close: vi.fn(),
@@ -232,6 +293,10 @@ describe('TerminalSurface', () => {
     webglAddonMock.instances.length = 0;
     webviewMock.handlers.length = 0;
     webviewMock.onDragDropEvent.mockClear();
+    appWindowMock.focusHandlers.length = 0;
+    appWindowMock.isTauriRuntime = false;
+    appWindowMock.onFocusChanged.mockClear();
+    appWindowMock.unlisten.mockClear();
     vi.mocked(saveEditorImage).mockReset().mockResolvedValue({
       absolutePath: '/Users/markcl/Library/Application Support/Boomerang/terminal.png',
       markdownPath: '~/Library/Application Support/Boomerang/terminal.png',
@@ -444,7 +509,7 @@ describe('TerminalSurface', () => {
     const terminalInstance = terminalMock.instances.at(-1);
     terminalInstance?.onDataHandler?.('x');
 
-    expect(attached.write).toHaveBeenCalledWith('x');
+    await waitFor(() => expect(attached.write).toHaveBeenCalledWith('x'));
     handlers!.onData(inputEcho);
 
     expect(terminalInstance?.write).toHaveBeenNthCalledWith(1, firstChunk);
@@ -480,8 +545,478 @@ describe('TerminalSurface', () => {
     const eraseEcho = new Uint8Array([0x08, 0x20, 0x08]);
     handlers!.onData(eraseEcho);
 
-    expect(attached.write).toHaveBeenCalledWith('\x7f');
+    await waitFor(() => expect(attached.write).toHaveBeenCalledWith('\x7f'));
     expect(terminalInstance?.write).toHaveBeenCalledWith(eraseEcho);
+  });
+
+  it('reclaims PTY input before writing when the app window regains focus', async () => {
+    let resolveReclaim!: () => void;
+    const reclaim = new Promise<void>((resolve) => {
+      resolveReclaim = resolve;
+    });
+    const attached = {
+      claimInput: vi
+        .fn()
+        .mockResolvedValueOnce(undefined)
+        .mockReturnValueOnce(reclaim),
+      close: vi.fn(),
+      dispose: vi.fn(),
+      releaseInput: vi.fn(),
+      resize: vi.fn(),
+      write: vi.fn(),
+    };
+    vi.mocked(attachPty).mockResolvedValue(attached);
+
+    render(<TerminalSurface label="Task terminal" ptyId={42} />);
+
+    const surface = await screen.findByLabelText('Task terminal');
+    surface.tabIndex = -1;
+    // A DOM focus signal can arrive before WebView focus restoration makes
+    // xterm active. It must not suppress the later useful focus signal.
+    window.dispatchEvent(new FocusEvent('focus'));
+    surface.focus();
+    await waitFor(() => expect(attached.claimInput).toHaveBeenCalledTimes(1));
+
+    // Opening an external folder can blur the webview without changing its
+    // active DOM element. The returning window must reclaim backend ownership.
+    window.dispatchEvent(new FocusEvent('focus'));
+    await waitFor(() => expect(attached.claimInput).toHaveBeenCalledTimes(2));
+    terminalMock.instances.at(-1)?.onDataHandler?.('x');
+
+    expect(attached.write).not.toHaveBeenCalled();
+
+    resolveReclaim();
+    await waitFor(() => expect(attached.write).toHaveBeenCalledWith('x'));
+  });
+
+  it('reclaims PTY input from the native Tauri window focus signal', async () => {
+    appWindowMock.isTauriRuntime = true;
+    const attached = {
+      claimInput: vi.fn(),
+      close: vi.fn(),
+      dispose: vi.fn(),
+      releaseInput: vi.fn(),
+      resize: vi.fn(),
+      write: vi.fn(),
+    };
+    vi.mocked(attachPty).mockResolvedValue(attached);
+
+    const { unmount } = render(<TerminalSurface label="Task terminal" ptyId={42} />);
+
+    const surface = await screen.findByLabelText('Task terminal');
+    surface.tabIndex = -1;
+    surface.focus();
+    await waitFor(() => expect(attached.claimInput).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(appWindowMock.onFocusChanged).toHaveBeenCalledOnce());
+
+    appWindowMock.focusHandlers[0]?.({ payload: false });
+    appWindowMock.focusHandlers[0]?.({ payload: true });
+
+    await waitFor(() => expect(attached.claimInput).toHaveBeenCalledTimes(2));
+    unmount();
+    expect(appWindowMock.unlisten).toHaveBeenCalledOnce();
+  });
+
+  it('releases PTY ownership on native blur even when xterm stays DOM-focused', async () => {
+    runAnimationFramesImmediately();
+    appWindowMock.isTauriRuntime = true;
+    const attached = {
+      claimInput: vi.fn(),
+      close: vi.fn(),
+      dispose: vi.fn(),
+      releaseInput: vi.fn(),
+      resize: vi.fn(),
+      write: vi.fn(),
+    };
+    vi.mocked(attachPty).mockResolvedValue(attached);
+    render(<TerminalSurface focusNonce={1} label="Task terminal" ptyId={42} />);
+
+    await screen.findByLabelText('Task terminal');
+    await waitFor(() => expect(appWindowMock.onFocusChanged).toHaveBeenCalledOnce());
+    const terminalInstance = terminalMock.instances.at(-1);
+    await waitFor(() => expect(terminalInstance?.helper).toHaveFocus());
+    await waitFor(() => expect(attached.claimInput).toHaveBeenCalledOnce());
+
+    appWindowMock.hasDocumentFocus = false;
+    appWindowMock.focusHandlers[0]?.({ payload: false });
+
+    await waitFor(() => expect(attached.releaseInput).toHaveBeenCalledOnce());
+    expect(terminalInstance?.helper).toHaveFocus();
+  });
+
+  it('does not focus or claim input from an inactive native window', async () => {
+    runAnimationFramesImmediately();
+    appWindowMock.hasDocumentFocus = false;
+    appWindowMock.isTauriRuntime = true;
+    const attached = {
+      claimInput: vi.fn(),
+      close: vi.fn(),
+      dispose: vi.fn(),
+      releaseInput: vi.fn(),
+      resize: vi.fn(),
+      write: vi.fn(),
+    };
+    vi.mocked(attachPty).mockResolvedValue(attached);
+    render(<TerminalSurface focusNonce={1} label="Task terminal" ptyId={42} />);
+
+    await screen.findByLabelText('Task terminal');
+    await waitFor(() => expect(appWindowMock.onFocusChanged).toHaveBeenCalledOnce());
+    await waitFor(() => expect(attachPty).toHaveBeenCalledOnce());
+
+    expect(terminalMock.instances.at(-1)?.focus).not.toHaveBeenCalled();
+    expect(attached.claimInput).not.toHaveBeenCalled();
+  });
+
+  it('remembers native blur while its terminal tab is inactive', async () => {
+    runAnimationFramesImmediately();
+    appWindowMock.isTauriRuntime = true;
+    const attached = {
+      claimInput: vi.fn(),
+      close: vi.fn(),
+      dispose: vi.fn(),
+      releaseInput: vi.fn(),
+      resize: vi.fn(),
+      write: vi.fn(),
+    };
+    vi.mocked(attachPty).mockResolvedValue(attached);
+    const view = render(
+      <TerminalSurface
+        active={false}
+        focusNonce={0}
+        label="Task terminal"
+        ptyId={42}
+      />,
+    );
+
+    await screen.findByLabelText('Task terminal');
+    await waitFor(() => expect(appWindowMock.onFocusChanged).toHaveBeenCalledOnce());
+    appWindowMock.hasDocumentFocus = false;
+    appWindowMock.focusHandlers[0]?.({ payload: false });
+
+    view.rerender(
+      <TerminalSurface active focusNonce={1} label="Task terminal" ptyId={42} />,
+    );
+
+    expect(terminalMock.instances.at(-1)?.focus).not.toHaveBeenCalled();
+    expect(attached.claimInput).not.toHaveBeenCalled();
+  });
+
+  it('defers a background terminal focus request until its window returns', async () => {
+    runAnimationFramesImmediately();
+    appWindowMock.isTauriRuntime = true;
+    const attached = {
+      claimInput: vi.fn(),
+      close: vi.fn(),
+      dispose: vi.fn(),
+      releaseInput: vi.fn(),
+      resize: vi.fn(),
+      write: vi.fn(),
+    };
+    vi.mocked(attachPty).mockResolvedValue(attached);
+    const view = render(
+      <TerminalSurface
+        active={false}
+        focusNonce={0}
+        label="Task terminal"
+        ptyId={42}
+      />,
+    );
+
+    await screen.findByLabelText('Task terminal');
+    await waitFor(() => expect(appWindowMock.onFocusChanged).toHaveBeenCalledOnce());
+    appWindowMock.hasDocumentFocus = false;
+    appWindowMock.focusHandlers.at(-1)?.({ payload: false });
+
+    view.rerender(
+      <TerminalSurface active focusNonce={1} label="Task terminal" ptyId={42} />,
+    );
+    expect(terminalMock.instances.at(-1)?.focus).not.toHaveBeenCalled();
+    expect(attached.claimInput).not.toHaveBeenCalled();
+
+    await waitFor(() => expect(appWindowMock.onFocusChanged).toHaveBeenCalledTimes(2));
+    appWindowMock.hasDocumentFocus = true;
+    appWindowMock.focusHandlers.at(-1)?.({ payload: true });
+
+    await waitFor(() => expect(terminalMock.instances.at(-1)?.helper).toHaveFocus());
+    await waitFor(() => expect(attached.claimInput).toHaveBeenCalledOnce());
+  });
+
+  it('drops local xterm data while its native window is blurred', async () => {
+    runAnimationFramesImmediately();
+    appWindowMock.isTauriRuntime = true;
+    const attached = {
+      claimInput: vi.fn(),
+      close: vi.fn(),
+      dispose: vi.fn(),
+      releaseInput: vi.fn(),
+      resize: vi.fn(),
+      write: vi.fn(),
+    };
+    vi.mocked(attachPty).mockResolvedValue(attached);
+    render(<TerminalSurface focusNonce={1} label="Task terminal" ptyId={42} />);
+
+    await screen.findByLabelText('Task terminal');
+    await waitFor(() => expect(appWindowMock.onFocusChanged).toHaveBeenCalledOnce());
+    const terminalInstance = terminalMock.instances.at(-1);
+    await waitFor(() => expect(attached.claimInput).toHaveBeenCalledOnce());
+
+    appWindowMock.hasDocumentFocus = false;
+    appWindowMock.focusHandlers[0]?.({ payload: false });
+    terminalInstance?.onDataHandler?.('x');
+    await new Promise((resolve) => window.setTimeout(resolve, 0));
+
+    expect(attached.write).not.toHaveBeenCalled();
+  });
+
+  it('reconciles a DOM-focused xterm whose local focus signal was missed', async () => {
+    runAnimationFramesImmediately();
+    const attached = {
+      claimInput: vi.fn(),
+      close: vi.fn(),
+      dispose: vi.fn(),
+      releaseInput: vi.fn(),
+      resize: vi.fn(),
+      write: vi.fn(),
+    };
+    vi.mocked(attachPty).mockResolvedValue(attached);
+    render(
+      <>
+        <button type="button">Outside terminal</button>
+        <TerminalSurface focusNonce={1} label="Task terminal" ptyId={42} />
+      </>,
+    );
+
+    await screen.findByLabelText('Task terminal');
+    const terminalInstance = terminalMock.instances.at(-1);
+    await waitFor(() => expect(terminalInstance?.helper).toHaveFocus());
+    await waitFor(() => expect(attached.claimInput).toHaveBeenCalledOnce());
+
+    screen.getByRole('button', { name: 'Outside terminal' }).focus();
+    await waitFor(() => expect(attached.releaseInput).toHaveBeenCalledOnce());
+    attached.claimInput.mockClear();
+    const activeElement = vi
+      .spyOn(document, 'activeElement', 'get')
+      .mockReturnValue(terminalInstance?.helper ?? null);
+
+    terminalInstance?.onDataHandler?.('x');
+
+    await waitFor(() => expect(attached.claimInput).toHaveBeenCalledOnce());
+    await waitFor(() => expect(attached.write).toHaveBeenCalledWith('x'));
+    activeElement.mockRestore();
+  });
+
+  it('transfers focus to a replacement xterm after a focused setup restarts', async () => {
+    runAnimationFramesImmediately();
+    const firstAttached = {
+      claimInput: vi.fn(),
+      close: vi.fn(),
+      dispose: vi.fn(),
+      releaseInput: vi.fn(),
+      resize: vi.fn(),
+      write: vi.fn(),
+    };
+    const nextAttached = {
+      claimInput: vi.fn(),
+      close: vi.fn(),
+      dispose: vi.fn(),
+      releaseInput: vi.fn(),
+      resize: vi.fn(),
+      write: vi.fn(),
+    };
+    vi.mocked(attachPty)
+      .mockResolvedValueOnce(firstAttached)
+      .mockResolvedValueOnce(nextAttached);
+    const view = render(
+      <TerminalSurface focusNonce={1} label="Task terminal" ptyId={42} theme="dark" />,
+    );
+
+    await screen.findByLabelText('Task terminal');
+    const firstTerminal = terminalMock.instances.at(-1);
+    await waitFor(() => expect(firstTerminal?.helper).toHaveFocus());
+    await waitFor(() => expect(firstAttached.claimInput).toHaveBeenCalledOnce());
+
+    view.rerender(
+      <TerminalSurface focusNonce={1} label="Task terminal" ptyId={42} theme="light" />,
+    );
+
+    const nextTerminal = terminalMock.instances.at(-1);
+    expect(nextTerminal).not.toBe(firstTerminal);
+    await waitFor(() => expect(nextTerminal?.helper).toHaveFocus());
+    await waitFor(() => expect(nextAttached.claimInput).toHaveBeenCalledOnce());
+    expect(firstTerminal?.helper).not.toHaveFocus();
+
+    nextTerminal?.onDataHandler?.('x');
+    await waitFor(() => expect(nextAttached.write).toHaveBeenCalledWith('x'));
+  });
+
+  it('focuses the real xterm input when focusNonce changes', async () => {
+    runAnimationFramesImmediately();
+    const view = render(
+      <TerminalSurface focusNonce={0} label="Task terminal" ptyId={42} />,
+    );
+
+    await screen.findByLabelText('Task terminal');
+    const terminalInstance = terminalMock.instances.at(-1);
+    expect(terminalInstance?.focus).not.toHaveBeenCalled();
+
+    view.rerender(
+      <TerminalSurface focusNonce={1} label="Task terminal" ptyId={42} />,
+    );
+
+    await waitFor(() => expect(terminalInstance?.focus).toHaveBeenCalledOnce());
+    expect(terminalInstance?.helper).toHaveFocus();
+  });
+
+  it('restores xterm focus when its native window is reactivated', async () => {
+    runAnimationFramesImmediately();
+    appWindowMock.isTauriRuntime = true;
+    render(
+      <>
+        <button type="button">Outside terminal</button>
+        <TerminalSurface focusNonce={1} label="Task terminal" ptyId={42} />
+      </>,
+    );
+
+    await screen.findByLabelText('Task terminal');
+    await waitFor(() => expect(appWindowMock.onFocusChanged).toHaveBeenCalledOnce());
+    const terminalInstance = terminalMock.instances.at(-1);
+    await waitFor(() => expect(terminalInstance?.focus).toHaveBeenCalledOnce());
+
+    appWindowMock.focusHandlers[0]?.({ payload: false });
+    screen.getByRole('button', { name: 'Outside terminal' }).focus();
+    appWindowMock.focusHandlers[0]?.({ payload: true });
+
+    await waitFor(() => expect(terminalInstance?.focus).toHaveBeenCalledTimes(2));
+    expect(terminalInstance?.helper).toHaveFocus();
+  });
+
+  it('preserves an external-action focus request until the window returns', async () => {
+    runAnimationFramesImmediately();
+    appWindowMock.isTauriRuntime = true;
+    const attached = {
+      claimInput: vi.fn(),
+      close: vi.fn(),
+      dispose: vi.fn(),
+      releaseInput: vi.fn(),
+      resize: vi.fn(),
+      write: vi.fn(),
+    };
+    vi.mocked(attachPty).mockResolvedValue(attached);
+    render(
+      <>
+        <button type="button">Open Folder</button>
+        <TerminalSurface
+          focusNonce={1}
+          label="Task terminal"
+          ptyId={42}
+        />
+      </>,
+    );
+
+    await screen.findByLabelText('Task terminal');
+    await waitFor(() => expect(appWindowMock.onFocusChanged).toHaveBeenCalledOnce());
+    const terminalInstance = terminalMock.instances.at(-1);
+    await waitFor(() => expect(terminalInstance?.focus).toHaveBeenCalledOnce());
+
+    screen.getByRole('button', { name: 'Open Folder' }).focus();
+    await waitFor(() => expect(attached.releaseInput).toHaveBeenCalledOnce());
+    getDefaultStore().set(terminalWindowFocusRestoreNonceAtom, 1);
+    appWindowMock.focusHandlers[0]?.({ payload: false });
+    appWindowMock.focusHandlers[0]?.({ payload: true });
+
+    await waitFor(() => expect(terminalInstance?.focus).toHaveBeenCalledTimes(2));
+    expect(terminalInstance?.helper).toHaveFocus();
+  });
+
+  it('keeps rapid terminal writes ordered while ownership checks are pending', async () => {
+    let resolveFirstWrite!: () => void;
+    const firstWrite = new Promise<void>((resolve) => {
+      resolveFirstWrite = resolve;
+    });
+    const attached = {
+      claimInput: vi.fn(),
+      close: vi.fn(),
+      dispose: vi.fn(),
+      releaseInput: vi.fn(),
+      resize: vi.fn(),
+      write: vi.fn().mockReturnValueOnce(firstWrite).mockResolvedValue(undefined),
+    };
+    vi.mocked(attachPty).mockResolvedValue(attached);
+
+    render(<TerminalSurface label="Task terminal" ptyId={42} />);
+
+    const surface = await screen.findByLabelText('Task terminal');
+    surface.tabIndex = -1;
+    surface.focus();
+    await waitFor(() => expect(attached.claimInput).toHaveBeenCalledOnce());
+
+    const terminalInstance = terminalMock.instances.at(-1);
+    terminalInstance?.onDataHandler?.('a');
+    terminalInstance?.onDataHandler?.('b');
+
+    await waitFor(() => expect(attached.write).toHaveBeenCalledTimes(1));
+    expect(attached.write).toHaveBeenNthCalledWith(1, 'a');
+
+    resolveFirstWrite();
+    await waitFor(() => expect(attached.write).toHaveBeenNthCalledWith(2, 'b'));
+  });
+
+  it('reclaims and writes after an earlier input claim failed', async () => {
+    const attached = {
+      claimInput: vi
+        .fn()
+        .mockRejectedValueOnce(new Error('temporary input claim failure'))
+        .mockResolvedValue(undefined),
+      close: vi.fn(),
+      dispose: vi.fn(),
+      releaseInput: vi.fn(),
+      resize: vi.fn(),
+      write: vi.fn(),
+    };
+    vi.mocked(attachPty).mockResolvedValue(attached);
+
+    render(<TerminalSurface label="Task terminal" ptyId={42} />);
+
+    const surface = await screen.findByLabelText('Task terminal');
+    surface.tabIndex = -1;
+    surface.focus();
+    await waitFor(() => expect(attached.claimInput).toHaveBeenCalledOnce());
+
+    terminalMock.instances.at(-1)?.onDataHandler?.('x');
+
+    await waitFor(() => expect(attached.claimInput).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(attached.write).toHaveBeenCalledWith('x'));
+  });
+
+  it('retries a focused write once after stale PTY ownership is reported', async () => {
+    const attached = {
+      claimInput: vi.fn(),
+      close: vi.fn(),
+      dispose: vi.fn(),
+      releaseInput: vi.fn(),
+      resize: vi.fn(),
+      write: vi
+        .fn()
+        .mockRejectedValueOnce(
+          new Error('pty_write: terminal view does not own focused input'),
+        )
+        .mockResolvedValue(undefined),
+    };
+    vi.mocked(attachPty).mockResolvedValue(attached);
+
+    render(<TerminalSurface label="Task terminal" ptyId={42} />);
+
+    const surface = await screen.findByLabelText('Task terminal');
+    surface.tabIndex = -1;
+    surface.focus();
+    await waitFor(() => expect(attached.claimInput).toHaveBeenCalledOnce());
+
+    terminalMock.instances.at(-1)?.onDataHandler?.('x');
+
+    await waitFor(() => expect(attached.write).toHaveBeenCalledTimes(2));
+    expect(attached.claimInput).toHaveBeenCalledTimes(2);
+    expect(attached.write).toHaveBeenNthCalledWith(1, 'x');
+    expect(attached.write).toHaveBeenNthCalledWith(2, 'x');
   });
 
   it('resizes the attached PTY to the fitted terminal grid on startup', async () => {

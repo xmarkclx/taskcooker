@@ -1,8 +1,10 @@
 import { fireEvent, render, screen } from "@testing-library/react";
+import { getDefaultStore } from "jotai";
 import type { ComponentProps } from "react";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { ProjectSummary } from "../../domain/domain";
+import { terminalWindowFocusRestoreNonceAtom } from "../terminal/terminalFocusState";
 import { TopBar } from "./TopBar";
 
 const projects: ProjectSummary[] = [
@@ -93,6 +95,10 @@ function renderTopBar(overrides: Partial<TopBarProps> = {}) {
 }
 
 describe("TopBar project picker", () => {
+  beforeEach(() => {
+    getDefaultStore().set(terminalWindowFocusRestoreNonceAtom, 0);
+  });
+
   it("delegates project window opens to the app shell", () => {
     const onOpenProjectWindow = vi.fn();
     renderTopBar({ onOpenProjectWindow });
@@ -101,5 +107,15 @@ describe("TopBar project picker", () => {
     fireEvent.click(screen.getByLabelText("Open life in new window"));
 
     expect(onOpenProjectWindow).toHaveBeenCalledWith(projects[1]);
+  });
+
+  it("requests terminal focus restoration before opening the project folder", () => {
+    const onOpenProjectFolder = vi.fn();
+    renderTopBar({ onOpenProjectFolder });
+
+    fireEvent.click(screen.getByRole("button", { name: "Open project folder" }));
+
+    expect(getDefaultStore().get(terminalWindowFocusRestoreNonceAtom)).toBe(1);
+    expect(onOpenProjectFolder).toHaveBeenCalledOnce();
   });
 });

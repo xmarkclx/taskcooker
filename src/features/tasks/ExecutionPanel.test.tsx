@@ -1,4 +1,5 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { getDefaultStore } from 'jotai';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import type { ComponentProps, ReactNode } from 'react';
@@ -7,6 +8,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type {
   ExecutionTerminalSummary,
 } from '../../domain/domain';
+import { terminalWindowFocusRestoreNonceAtom } from '../terminal/terminalFocusState';
 import { ExecutionPanel } from './ExecutionPanel';
 
 const deferredMountMock = vi.hoisted(() => ({
@@ -108,6 +110,7 @@ vi.mock('../terminal/TerminalSurface', async () => {
 
 describe('ExecutionPanel', () => {
   beforeEach(() => {
+    getDefaultStore().set(terminalWindowFocusRestoreNonceAtom, 0);
     deferredMountMock.strategies.length = 0;
   });
 
@@ -138,6 +141,34 @@ describe('ExecutionPanel', () => {
 
     fireEvent.click(openFolderButton);
     expect(onOpenFolder).toHaveBeenCalledOnce();
+  });
+
+  it('restores the active terminal focus after opening the project folder', async () => {
+    const onOpenFolder = vi.fn();
+    renderPanel(
+      [
+        {
+          exitCode: null,
+          kind: 'codex',
+          label: 'Codex CLI',
+          ptyId: 42,
+          state: 'running',
+          todoId: 128,
+        },
+      ],
+      { onOpenFolder },
+    );
+
+    const terminalSurface = screen.getByTestId('terminal-surface-Codex CLI');
+    const openFolderButton = screen.getByRole('button', { name: 'Open Folder' });
+    terminalSurface.focus();
+    openFolderButton.focus();
+
+    fireEvent.click(openFolderButton);
+
+    expect(onOpenFolder).toHaveBeenCalledOnce();
+    expect(getDefaultStore().get(terminalWindowFocusRestoreNonceAtom)).toBe(1);
+    await waitFor(() => expect(terminalSurface).toHaveFocus());
   });
 
   it('places terminal tabs on the left edge of the execution surface', () => {
@@ -458,6 +489,35 @@ describe('ExecutionPanel', () => {
     );
   });
 
+  it('moves focus into a terminal selected with the mouse', async () => {
+    renderPanel([
+      {
+        exitCode: null,
+        kind: 'codex',
+        label: 'Codex CLI',
+        ptyId: 42,
+        state: 'running',
+        todoId: 128,
+      },
+      {
+        exitCode: null,
+        kind: 'terminal',
+        label: 'FBRice',
+        ptyId: 77,
+        state: 'running',
+        todoId: 128,
+      },
+    ]);
+
+    const fbriceTab = screen.getByRole('tab', { name: 'FBRice' });
+    fbriceTab.focus();
+    fireEvent.click(fbriceTab);
+
+    const fbriceSurface = await screen.findByTestId('terminal-surface-FBRice');
+    expect(fbriceSurface).toHaveAttribute('data-active', 'true');
+    await waitFor(() => expect(fbriceSurface).toHaveFocus());
+  });
+
   it('mounts terminal surfaces during browser idle time so task switching can paint first', () => {
     renderPanel([
       {
@@ -573,6 +633,9 @@ describe('ExecutionPanel', () => {
     expect(screen.getByRole('tab', { name: 'Claude CLI' })).toHaveAttribute(
       'aria-selected',
       'true',
+    );
+    await waitFor(() =>
+      expect(screen.getByTestId('terminal-surface-Claude CLI')).toHaveFocus(),
     );
   });
 

@@ -5,6 +5,8 @@ import { SearchAddon } from '@xterm/addon-search';
 import { WebLinksAddon } from '@xterm/addon-web-links';
 import { WebglAddon } from '@xterm/addon-webgl';
 import { Terminal, type ILink, type ILinkProvider } from '@xterm/xterm';
+import { getCurrentWindow } from '@tauri-apps/api/window';
+import { useStore } from 'jotai';
 import {
   useEffect,
   useRef,
@@ -16,6 +18,7 @@ import {
 
 import { attachPty } from './ptyBridge';
 import type { AttachedPty } from './ptyBridge';
+import { terminalWindowFocusRestoreNonceAtom } from './terminalFocusState';
 import {
   TerminalFindBar,
   type TerminalFindDirection,
@@ -24,6 +27,7 @@ import {
 import { openExternalUrl, openPathOrUrl, saveEditorImage } from '../../tauri/commands';
 import { listenForDroppedPathsWhenFocused } from '../../tauri/dropPaths';
 import { isMacPlatform } from '../../tauri/platform';
+import { isTauriRuntime } from '../../tauri/runtime';
 import {
   fileToBase64,
   formatTerminalImageReferences,
@@ -93,10 +97,18 @@ export function TerminalSurface({
   theme = 'dark',
 }: TerminalSurfaceProps) {
   useSlowdownRenderProbe('terminal-surface', `${label}/pty:${ptyId}`);
+  const terminalFocusStore = useStore();
   const shellRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const attachedRef = useRef<AttachedPty | null>(null);
+  const activeRef = useRef(active);
   const hasInputFocusRef = useRef(false);
+  const focusInputRef = useRef<(() => void) | null>(null);
+  const pendingInputFocusRef = useRef(false);
+  const reclaimInputRef = useRef<(() => void) | null>(null);
+  const restoreInputAfterSetupRef = useRef(false);
+  const suspendInputRef = useRef<(() => void) | null>(null);
+  const windowHasFocusRef = useRef(document.hasFocus());
   const refitRef = useRef<(() => void) | null>(null);
   const terminalRef = useRef<Terminal | null>(null);
   const searchAddonRef = useRef<SearchAddon | null>(null);
@@ -105,6 +117,7 @@ export function TerminalSurface({
   const [findOpen, setFindOpen] = useState(false);
   const [findFocusNonce, setFindFocusNonce] = useState(0);
   const [findResults, setFindResults] = useState<TerminalFindResults | null>(null);
+  activeRef.current = active;
 
   useEffect(() => {
     const container = containerRef.current;
@@ -220,12 +233,84 @@ export function TerminalSurface({
       });
       void attached.resize(size.cols, size.rows);
     };
-    const writeDisposable = terminal.onData((data) => {
-      if (!hasInputFocusRef.current) {
+    let inputOwnershipTransition: Promise<void> = Promise.resolve();
+    const queueInputOwnershipTransition = (transition: () => Promise<void>) => {
+      const next = inputOwnershipTransition.catch(() => undefined).then(transition);
+      inputOwnershipTransition = next;
+      void next.catch(() => undefined);
+      return next;
+    };
+    const claimAttachedInput = (target = attachedRef.current) =>
+      target
+        ? queueInputOwnershipTransition(() => target.claimInput())
+        : inputOwnershipTransition;
+    const releaseAttachedInput = (target = attachedRef.current) => {
+      if (target) {
+        void queueInputOwnershipTransition(() => target.releaseInput());
+      }
+    };
+    const terminalOwnsLiveInput = () => {
+      const documentHasFocus = document.hasFocus();
+      const domOwnsInput = container.contains(document.activeElement);
+      if (documentHasFocus && domOwnsInput) {
+        // A real key event is authoritative if a native focus notification was
+        // missed; inactive webviews report document.hasFocus() as false.
+        windowHasFocusRef.current = true;
+      }
+      return documentHasFocus && (hasInputFocusRef.current || domOwnsInput);
+    };
+    const writeTerminalInput = async (data: string) => {
+      const target = attachedRef.current;
+      if (!target || !terminalOwnsLiveInput()) {
         return;
       }
 
-      void attached?.write(data);
+      try {
+        if (!hasInputFocusRef.current) {
+          hasInputFocusRef.current = true;
+          await claimAttachedInput(target);
+        } else {
+          try {
+            await inputOwnershipTransition;
+          } catch {
+            if (!terminalOwnsLiveInput() || attachedRef.current !== target) {
+              return;
+            }
+            // A rejected claim/release must not poison the ownership queue
+            // forever while the real xterm textarea remains focused.
+            await claimAttachedInput(target);
+          }
+        }
+        if (!terminalOwnsLiveInput() || attachedRef.current !== target) {
+          return;
+        }
+        await target.write(data);
+      } catch (error) {
+        if (
+          !isPtyInputOwnershipError(error) ||
+          !terminalOwnsLiveInput() ||
+          attachedRef.current !== target
+        ) {
+          return;
+        }
+
+        try {
+          await claimAttachedInput(target);
+          if (terminalOwnsLiveInput() && attachedRef.current === target) {
+            await target.write(data);
+          }
+        } catch {
+          // A closed terminal cannot accept input; the exit/attach UI owns that state.
+        }
+      }
+    };
+    let inputWriteTransition: Promise<void> = Promise.resolve();
+    const writeDisposable = terminal.onData((data) => {
+      const next = inputWriteTransition.catch(() => undefined).then(() =>
+        writeTerminalInput(data),
+      );
+      inputWriteTransition = next;
+      void next.catch(() => undefined);
     });
     const resizeDisposable = terminal.onResize((size) => {
       resizeAttachedPty(size);
@@ -234,22 +319,68 @@ export function TerminalSurface({
       scheduleFitTerminal();
     });
     resizeObserver.observe(container);
+    let inputClaimSequence = 0;
     const claimInput = () => {
+      if (!windowHasFocusRef.current || !document.hasFocus()) {
+        hasInputFocusRef.current = false;
+        return;
+      }
+
       hasInputFocusRef.current = true;
-      void attachedRef.current?.claimInput();
+      inputClaimSequence += 1;
+      void claimAttachedInput();
     };
+    reclaimInputRef.current = claimInput;
+    const focusInput = () => {
+      if (!windowHasFocusRef.current || !document.hasFocus()) {
+        hasInputFocusRef.current = false;
+        pendingInputFocusRef.current = true;
+        return;
+      }
+
+      const claimSequenceBeforeFocus = inputClaimSequence;
+      terminal.focus();
+      if (
+        container.contains(document.activeElement) &&
+        inputClaimSequence === claimSequenceBeforeFocus
+      ) {
+        // WebView focus and Fast Refresh do not always emit a new focusin.
+        // Reconcile the real textarea focus with backend PTY ownership.
+        claimInput();
+      }
+      if (container.contains(document.activeElement)) {
+        pendingInputFocusRef.current = false;
+      }
+    };
+    focusInputRef.current = focusInput;
+    const suspendInput = () => {
+      hasInputFocusRef.current = false;
+      releaseAttachedInput();
+    };
+    suspendInputRef.current = suspendInput;
     const releaseInput = () => {
       window.setTimeout(() => {
-        if (container.contains(document.activeElement)) {
+        if (disposed) {
           return;
         }
 
-        hasInputFocusRef.current = false;
-        void attachedRef.current?.releaseInput();
+        if (
+          windowHasFocusRef.current &&
+          document.hasFocus() &&
+          container.contains(document.activeElement)
+        ) {
+          return;
+        }
+
+        suspendInput();
       }, 0);
     };
     container.addEventListener('focusin', claimInput);
     container.addEventListener('focusout', releaseInput);
+    if (restoreInputAfterSetupRef.current) {
+      restoreInputAfterSetupRef.current = false;
+      focusInput();
+    }
 
     recordSlowdownProfilerEvent({
       detail: `${label}/pty:${ptyId}`,
@@ -303,9 +434,13 @@ export function TerminalSurface({
       });
       lastSentPtySize = null;
       resizeAttachedPty({ cols: terminal.cols, rows: terminal.rows });
-      if (hasInputFocusRef.current || container.contains(document.activeElement)) {
+      if (
+        windowHasFocusRef.current &&
+        document.hasFocus() &&
+        (hasInputFocusRef.current || container.contains(document.activeElement))
+      ) {
         hasInputFocusRef.current = true;
-        void next.claimInput();
+        void claimAttachedInput(next);
       }
     }).catch((nextError: unknown) => {
       if (disposed) {
@@ -328,9 +463,27 @@ export function TerminalSurface({
         kind: 'terminal-detached',
         surface: 'terminal',
       });
-      hasInputFocusRef.current = false;
-      void attachedRef.current?.releaseInput();
+      const oldTerminalOwnedDomFocus = container.contains(document.activeElement);
+      restoreInputAfterSetupRef.current =
+        restoreInputAfterSetupRef.current ||
+        (activeRef.current &&
+          windowHasFocusRef.current &&
+          document.hasFocus() &&
+          oldTerminalOwnedDomFocus);
+      if (oldTerminalOwnedDomFocus) {
+        terminal.blur();
+      }
+      suspendInput();
       attachedRef.current = null;
+      if (reclaimInputRef.current === claimInput) {
+        reclaimInputRef.current = null;
+      }
+      if (focusInputRef.current === focusInput) {
+        focusInputRef.current = null;
+      }
+      if (suspendInputRef.current === suspendInput) {
+        suspendInputRef.current = null;
+      }
       refitRef.current = null;
       searchAddonRef.current = null;
       terminalRef.current = null;
@@ -366,13 +519,129 @@ export function TerminalSurface({
     };
   }, [active]);
 
+  // Track native focus even while this terminal tab is inactive, so a tab
+  // activated in a background webview cannot claim PTY input. Open Folder
+  // actions explicitly request restoration because their toolbar button owns
+  // DOM focus before Explorer takes over.
+  useEffect(() => {
+    let lastFocusRestoreNonce = terminalFocusStore.get(
+      terminalWindowFocusRestoreNonceAtom,
+    );
+    let windowBlurred = false;
+    let restoreInputOnWindowFocus = false;
+    let reclaimedSinceWindowBlur = false;
+    const terminalOwnedFocusBeforeBlur = () => {
+      const container = containerRef.current;
+      const activeElement = document.activeElement;
+      if (container?.contains(activeElement)) {
+        return true;
+      }
+
+      const webviewClearedActiveElement =
+        activeElement === document.body || activeElement === document.documentElement;
+      return webviewClearedActiveElement && hasInputFocusRef.current;
+    };
+    const reclaimFocusedInput = () => {
+      windowHasFocusRef.current = true;
+      if (!active) {
+        windowBlurred = false;
+        restoreInputOnWindowFocus = false;
+        reclaimedSinceWindowBlur = false;
+        return;
+      }
+
+      if (reclaimedSinceWindowBlur) {
+        return;
+      }
+
+      if (windowBlurred) {
+        const shouldRestoreInput =
+          restoreInputOnWindowFocus || pendingInputFocusRef.current;
+        windowBlurred = false;
+        restoreInputOnWindowFocus = false;
+        if (shouldRestoreInput) {
+          focusInputRef.current?.();
+          reclaimedSinceWindowBlur = !pendingInputFocusRef.current;
+          if (reclaimedSinceWindowBlur) {
+            return;
+          }
+        }
+      } else if (pendingInputFocusRef.current) {
+        focusInputRef.current?.();
+        reclaimedSinceWindowBlur = !pendingInputFocusRef.current;
+        if (reclaimedSinceWindowBlur) {
+          return;
+        }
+      }
+
+      const container = containerRef.current;
+      if (document.hasFocus() && container?.contains(document.activeElement)) {
+        reclaimedSinceWindowBlur = true;
+        reclaimInputRef.current?.();
+      }
+    };
+    const markWindowBlurred = () => {
+      const alreadyBlurred = windowBlurred;
+      const focusRestoreNonce = terminalFocusStore.get(
+        terminalWindowFocusRestoreNonceAtom,
+      );
+      const externalActionRequested = focusRestoreNonce !== lastFocusRestoreNonce;
+      lastFocusRestoreNonce = focusRestoreNonce;
+      restoreInputOnWindowFocus =
+        restoreInputOnWindowFocus ||
+        (active && (externalActionRequested || terminalOwnedFocusBeforeBlur()));
+      windowBlurred = true;
+      reclaimedSinceWindowBlur = false;
+      windowHasFocusRef.current = false;
+      if (!alreadyBlurred) {
+        suspendInputRef.current?.();
+      }
+    };
+
+    window.addEventListener('blur', markWindowBlurred);
+    window.addEventListener('focus', reclaimFocusedInput);
+
+    if (!isTauriRuntime()) {
+      return () => {
+        window.removeEventListener('blur', markWindowBlurred);
+        window.removeEventListener('focus', reclaimFocusedInput);
+      };
+    }
+
+    let disposed = false;
+    let unlisten: (() => void) | null = null;
+    void getCurrentWindow()
+      .onFocusChanged(({ payload: focused }) => {
+        if (focused) {
+          reclaimFocusedInput();
+        } else {
+          markWindowBlurred();
+        }
+      })
+      .then((nextUnlisten) => {
+        if (disposed) {
+          nextUnlisten();
+          return;
+        }
+        unlisten = nextUnlisten;
+      })
+      .catch(() => undefined);
+
+    return () => {
+      disposed = true;
+      window.removeEventListener('blur', markWindowBlurred);
+      window.removeEventListener('focus', reclaimFocusedInput);
+      unlisten?.();
+    };
+  }, [active, terminalFocusStore]);
+
   useEffect(() => {
     if (!active || focusNonce === 0) {
       return undefined;
     }
 
     const frame = requestAnimationFrame(() => {
-      terminalRef.current?.focus();
+      focusInputRef.current?.();
     });
 
     return () => {
@@ -582,6 +851,11 @@ function containTerminalScroll(event: WheelEvent<HTMLDivElement> | TouchEvent<HT
 
 function terminalAttachErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+function isPtyInputOwnershipError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return message.includes('terminal view does not own focused input');
 }
 
 function scheduleTerminalDispose(terminal: Terminal, detail: string) {

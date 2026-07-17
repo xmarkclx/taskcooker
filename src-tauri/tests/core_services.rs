@@ -537,6 +537,37 @@ fn deleting_a_todo_worktree_removes_files_and_clears_task_worktree_fields() {
 }
 
 #[test]
+fn deleting_an_already_removed_worktree_clears_stale_task_worktree_fields() {
+    let db = new_db();
+    let (_temp, project_id) = git_project_fixture(&db);
+    let todo = db.create_todo(project_id, "Delete stale worktree").unwrap();
+    let worktree = db.enable_todo_worktree(todo.id, "T-1").unwrap();
+    let project = db.get_project(project_id).unwrap();
+    let output = std::process::Command::new("git")
+        .arg("-C")
+        .arg(&project.working_directory)
+        .arg("worktree")
+        .arg("remove")
+        .arg("--force")
+        .arg(&worktree.path)
+        .output()
+        .expect("git worktree remove runs");
+    assert!(output.status.success());
+
+    db.delete_todo_worktree(todo.id).unwrap();
+
+    let snapshot = db.app_snapshot(Some(project_id), Some(todo.id)).unwrap();
+    let updated = snapshot
+        .todos
+        .iter()
+        .find(|item| item.id == todo.id)
+        .unwrap();
+    assert_eq!(updated.worktree_name, None);
+    assert_eq!(updated.worktree_path, None);
+    assert_eq!(updated.active_working_directory, project.working_directory);
+}
+
+#[test]
 fn successful_worktree_merge_terminal_marks_the_todo_worktree_merged() {
     let db = new_db();
     let (_temp, project_id) = git_project_fixture(&db);

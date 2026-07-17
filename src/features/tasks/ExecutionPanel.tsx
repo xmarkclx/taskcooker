@@ -11,6 +11,7 @@ import {
   Zap,
   X,
 } from 'lucide-react';
+import { useSetAtom } from 'jotai';
 import {
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
@@ -31,6 +32,7 @@ import { DeferredMount, useActivatedOnce } from '../../ui/DeferredMount';
 import { MarkdownEditor } from '../markdown/MarkdownEditor';
 import { useSlowdownRenderProbe } from '../performance/slowdownProfiler';
 import { clearCachedPtyScrollback } from '../terminal/ptyBridge';
+import { terminalWindowFocusRestoreNonceAtom } from '../terminal/terminalFocusState';
 import { TerminalSurface } from '../terminal/TerminalSurface';
 
 const PENDING_TERMINAL_TAB_ID = 'pending-terminal';
@@ -143,6 +145,9 @@ export function ExecutionPanel({
   worktree,
 }: ExecutionPanelProps) {
   useSlowdownRenderProbe('execution-panel', `todo:${todoId}`);
+  const requestTerminalWindowFocusRestore = useSetAtom(
+    terminalWindowFocusRestoreNonceAtom,
+  );
   // Remember the active execution tab per task, so returning to a task reselects
   // the tab you left on instead of resetting to Artifacts.
   const [activeTabByTodo, setActiveTabByTodo] = useState<Record<number, string>>({});
@@ -188,6 +193,10 @@ export function ExecutionPanel({
   const artifactPaneRef = useRef<HTMLDivElement>(null);
   const focusActiveTabAfterShortcutRef = useRef(false);
   const [tabContentFocusNonce, setTabContentFocusNonce] = useState(0);
+  const selectTabAndFocusContent = (tabId: string) => {
+    setActiveTabId(tabId);
+    setTabContentFocusNonce((nonce) => nonce + 1);
+  };
   const orderedTabIds = useMemo(
     () => [artifactTabId, ...tabs.map(terminalTabId)],
     [tabs],
@@ -250,6 +259,16 @@ export function ExecutionPanel({
     moveActiveTab(direction);
   };
 
+  const openFolderAndRestoreTerminalFocus = () => {
+    const terminalIsActive =
+      activeTabId !== null && tabs.some((tab) => terminalTabId(tab) === activeTabId);
+    if (terminalIsActive) {
+      setTabContentFocusNonce((nonce) => nonce + 1);
+      requestTerminalWindowFocusRestore((nonce) => nonce + 1);
+    }
+    onOpenFolder();
+  };
+
   useEffect(() => {
     if (!focusActiveTabAfterShortcutRef.current || activeTabId === null) {
       return;
@@ -309,7 +328,7 @@ export function ExecutionPanel({
       const terminal = options
         ? await onStartExecutionTerminal(kind, options)
         : await onStartExecutionTerminal(kind);
-      setActiveTabId(terminalTabId(terminal));
+      selectTabAndFocusContent(terminalTabId(terminal));
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : String(nextError));
     } finally {
@@ -323,7 +342,9 @@ export function ExecutionPanel({
     // line while the shell's close handler rolls the snapshot back.
     const nextTabs = tabs.filter((item) => item.ptyId !== tab.ptyId);
     if (activeTabId === terminalTabId(tab)) {
-      setActiveTabId(nextTabs.at(-1) ? terminalTabId(nextTabs.at(-1)!) : artifactTabId);
+      selectTabAndFocusContent(
+        nextTabs.at(-1) ? terminalTabId(nextTabs.at(-1)!) : artifactTabId,
+      );
     }
     setMountedTabIds((current) => current.filter((id) => id !== terminalTabId(tab)));
     clearCachedPtyScrollback(tab.ptyId);
@@ -459,7 +480,7 @@ export function ExecutionPanel({
     try {
       const terminal = await action();
       if (terminal) {
-        setActiveTabId(terminalTabId(terminal));
+        selectTabAndFocusContent(terminalTabId(terminal));
       }
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : String(nextError));
@@ -589,7 +610,7 @@ export function ExecutionPanel({
         <AppButton
           aria-label="Open Folder"
           disabled={!canStart || openFolderDisabled}
-          onClick={onOpenFolder}
+          onClick={openFolderAndRestoreTerminalFocus}
           title="Open project folder"
           variant="toolbar"
         >
@@ -694,7 +715,7 @@ export function ExecutionPanel({
             aria-selected={activeTabId === artifactTabId}
             className={activeTabId === artifactTabId ? 'active' : ''}
             id="execution-tab-artifacts"
-            onClick={() => setActiveTabId(artifactTabId)}
+            onClick={() => selectTabAndFocusContent(artifactTabId)}
             onContextMenu={openArtifactContextMenu}
             role="tab"
             type="button"
@@ -728,7 +749,7 @@ export function ExecutionPanel({
                 aria-selected={activeTabId === terminalTabId(tab)}
                 className={activeTabId === terminalTabId(tab) ? 'active' : ''}
                 id={`execution-tab-${terminalTabId(tab)}`}
-                onClick={() => setActiveTabId(terminalTabId(tab))}
+                onClick={() => selectTabAndFocusContent(terminalTabId(tab))}
                 onContextMenu={openTerminalContextMenu(tab)}
                 onDoubleClick={() => beginRename(tab)}
                 role="tab"

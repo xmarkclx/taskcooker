@@ -26,6 +26,7 @@ import {
   Trash2,
   Zap,
 } from 'lucide-react';
+import { useSetAtom } from 'jotai';
 import { useEffect, useRef, useState } from 'react';
 
 import type {
@@ -49,6 +50,7 @@ import { WindowControls } from '../../ui/WindowControls';
 import { ProjectActionIcon } from '../projects/ProjectActionIcon';
 import { ProjectSelectorMenu } from '../projects/ProjectSelectorMenu';
 import { childProjectIds } from '../projects/projectChildren';
+import { terminalWindowFocusRestoreNonceAtom } from '../terminal/terminalFocusState';
 import { todoStateToneClass } from '../tasks/taskBadges';
 import { useLiveElapsedSeconds } from '../time/liveTime';
 
@@ -129,6 +131,9 @@ export function TopBar({
   runningTimer: TopBarTimerSummary | null;
   themePreference: AppThemePreference;
 }) {
+  const requestTerminalWindowFocusRestore = useSetAtom(
+    terminalWindowFocusRestoreNonceAtom,
+  );
   const [projectMenuOpen, setProjectMenuOpen] = useState(false);
   const [actionsMenuOpen, setActionsMenuOpen] = useState(false);
   const [windowMenuOpen, setWindowMenuOpen] = useState(false);
@@ -520,6 +525,7 @@ export function TopBar({
               setProjectMenuOpen(false);
               setActionsMenuOpen(false);
               setWindowMenuOpen(false);
+              requestTerminalWindowFocusRestore((nonce) => nonce + 1);
               onOpenProjectFolder();
             }}
             className="top-icon-button"
