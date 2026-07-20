@@ -243,4 +243,43 @@ mod tests {
             "~/AppData/Roaming/com.marklopez.boomerangtasks/artifacts/project-6/F2-15.md"
         );
     }
+
+    #[test]
+    fn wsl_app_data_files_resolve_under_wsl_home_with_a_linux_prompt_path() {
+        let windows_home = Path::new(r"C:\Users\mark");
+        let app_data_dir = windows_home
+            .join("AppData")
+            .join("Roaming")
+            .join("com.marklopez.boomerangtasks");
+        let wsl_home = Path::new(r"\\wsl.localhost\Ubuntu\home\mark");
+        let native_path = app_data_dir
+            .join("attachments")
+            .join("project-6")
+            .join("T-26")
+            .join("clipboard.png");
+
+        let location = app_data_file_location_for_roots(
+            &native_path,
+            Some(windows_home),
+            Some(wsl_home),
+            true,
+        )
+        .expect("WSL app-data file location");
+
+        assert_eq!(
+            location.host_path,
+            wsl_home
+                .join("AppData")
+                .join("Roaming")
+                .join("com.marklopez.boomerangtasks")
+                .join("attachments")
+                .join("project-6")
+                .join("T-26")
+                .join("clipboard.png")
+        );
+        assert_eq!(
+            location.markdown_path,
+            "~/AppData/Roaming/com.marklopez.boomerangtasks/attachments/project-6/T-26/clipboard.png"
+        );
+    }
 }

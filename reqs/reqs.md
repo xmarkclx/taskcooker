@@ -1,5 +1,10 @@
 # Product Requirements
 
+## Automatic task titles
+
+- When Codex Spark is selected, automatic and manual task title generation must invoke the configured Codex CLI on Windows even when it is installed as an npm PowerShell or command shim.
+- If Codex Spark cannot generate a title, the task keeps the local first-text-line fallback title.
+
 ## Terminal input focus
 
 - Opening a project folder from either the top bar or an execution panel must restore the active terminal's keyboard focus when the TaskCooker window returns.

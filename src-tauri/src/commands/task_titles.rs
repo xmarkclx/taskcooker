@@ -1,3 +1,4 @@
+use std::path::Path;
 use std::process::{Command, Output, Stdio};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -228,8 +229,13 @@ fn run_process_with_timeout(
     // GUI-launched apps inherit launchd's minimal PATH, which misses Homebrew
     // and user bin directories where a bare `codex` usually lives.
     let path = crate::pty::usable_cli_path(std::env::var("PATH").ok().as_deref());
-    let mut child = Command::new(&process.program)
-        .args(&process.args)
+    #[cfg(windows)]
+    let (program, args) =
+        process_command_for_windows(process, &crate::pty::windows_terminal_shell_path());
+    #[cfg(not(windows))]
+    let (program, args) = (process.program.clone(), process.args.clone());
+    let mut child = Command::new(program)
+        .args(args)
         .current_dir(&process.cwd)
         .env("PATH", path)
         .stdin(Stdio::null())
@@ -258,6 +264,43 @@ fn run_process_with_timeout(
 
         thread::sleep(Duration::from_millis(100));
     }
+}
+
+fn process_command_for_windows(
+    process: &ProcessCommandSpec,
+    shell: &Path,
+) -> (String, Vec<String>) {
+    let shell_name = shell
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or_default();
+    if !shell_name.eq_ignore_ascii_case("pwsh.exe")
+        && !shell_name.eq_ignore_ascii_case("powershell.exe")
+    {
+        return (process.program.clone(), process.args.clone());
+    }
+
+    let mut command = format!("& {}", powershell_quote(&process.program));
+    for arg in &process.args {
+        command.push(' ');
+        command.push_str(&powershell_quote(arg));
+    }
+    command.push_str(" ; exit $LASTEXITCODE");
+
+    (
+        shell.display().to_string(),
+        vec![
+            "-NoLogo".to_string(),
+            "-NoProfile".to_string(),
+            "-NonInteractive".to_string(),
+            "-Command".to_string(),
+            command,
+        ],
+    )
+}
+
+fn powershell_quote(value: &str) -> String {
+    format!("'{}'", value.replace('\'', "''"))
 }
 
 fn task_title_generation_prompt(description_markdown: &str) -> String {
@@ -372,6 +415,38 @@ mod tests {
         assert!(prompt.contains("This is a TaskCooker task title"));
         assert!(prompt.contains("If image references are present"));
         assert!(prompt.contains("Investigate why deploy previews fail."));
+    }
+
+    #[test]
+    fn wraps_windows_codex_shims_with_powershell() {
+        let process = ProcessCommandSpec {
+            display: "codex exec prompt".to_string(),
+            program: "codex".to_string(),
+            args: vec!["exec".to_string(), "prompt with 'quotes'".to_string()],
+            cwd: r"C:\taskcooker".to_string(),
+        };
+
+        let (program, args) = process_command_for_windows(
+            &process,
+            Path::new(
+                r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe",
+            ),
+        );
+
+        assert_eq!(
+            program,
+            r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"
+        );
+        assert_eq!(
+            args,
+            [
+                "-NoLogo",
+                "-NoProfile",
+                "-NonInteractive",
+                "-Command",
+                "& 'codex' 'exec' 'prompt with ''quotes''' ; exit $LASTEXITCODE",
+            ]
+        );
     }
 
     #[test]
