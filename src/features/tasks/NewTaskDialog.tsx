@@ -148,7 +148,6 @@ export function NewTaskDialog({
                 <span>Task title</span>
                 <input
                   aria-label="Task title"
-                  autoFocus
                   onBlur={field.handleBlur}
                   onChange={(event) => {
                     const nextTitle = event.target.value;
@@ -203,6 +202,7 @@ export function NewTaskDialog({
                     <MarkdownEditor
                       ariaLabel="Task description Markdown"
                       attachmentTarget={attachmentTarget}
+                      autoFocus
                       conflictLabel="Description changed outside this dialog."
                       fontFamily={markdownEditorFontFamily}
                       fontSize={markdownEditorFontSize}
