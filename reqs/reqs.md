@@ -23,6 +23,10 @@
 - WSL artifact paths shown in prompts must use forward slashes so they are directly usable in Linux shells.
 - Projects that do not run terminals in WSL continue storing artifacts in the host platform's app-data directory.
 
+## Windows CLI invocation
+
+- Invoking the Boomerang Tasks executable as a CLI from Windows or WSL must not allocate or flash a separate Windows console window, including for development builds.
+
 ## Time tracking
 
 - Tasks and Time Logs are explicit workspace tabs. Selecting Tasks restores the normal task workspace; selecting Time Logs opens the reporting page.

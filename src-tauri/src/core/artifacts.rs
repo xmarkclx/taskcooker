@@ -26,10 +26,19 @@ fn todo_artifact_location_for_roots(
     display_id: &str,
 ) -> AppResult<TodoArtifactLocation> {
     let native_path = todo_artifact_path(app_data_dir, project_id, display_id);
+    app_data_file_location_for_roots(&native_path, host_home, wsl_home, use_wsl)
+}
+
+fn app_data_file_location_for_roots(
+    native_path: &Path,
+    host_home: Option<&Path>,
+    wsl_home: Option<&Path>,
+    use_wsl: bool,
+) -> AppResult<TodoArtifactLocation> {
     if !use_wsl {
         return Ok(TodoArtifactLocation {
-            markdown_path: home_aliased_path(&native_path),
-            host_path: native_path,
+            markdown_path: home_aliased_path(native_path),
+            host_path: native_path.to_path_buf(),
         });
     }
 
@@ -38,8 +47,8 @@ fn todo_artifact_location_for_roots(
     })?;
     let relative_path = native_path.strip_prefix(host_home).map_err(|_| {
         AppError::InvalidInput(format!(
-            "app data directory is outside the Windows user home: {}",
-            app_data_dir.display()
+            "app data file is outside the Windows user home: {}",
+            native_path.display()
         ))
     })?;
     let wsl_home = wsl_home.ok_or_else(|| {
