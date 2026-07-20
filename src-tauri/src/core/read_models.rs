@@ -1,12 +1,10 @@
-use std::collections::{HashMap, HashSet};
-use std::fs;
-use std::path::Path;
-
 use super::time::{
     elapsed_label_since, rolled_up_time_seconds, seconds_between_now, state_age_label,
     time_seconds_for_todo, todo_stale,
 };
 use super::*;
+use std::collections::{HashMap, HashSet};
+use std::fs;
 
 pub(super) fn todo_by_id_locked(conn: &Connection, todo_id: i64) -> AppResult<Todo> {
     conn.query_row(
@@ -86,7 +84,7 @@ pub(super) fn project_summaries(conn: &Connection) -> AppResult<Vec<ProjectSumma
 pub(super) fn todo_summaries(
     conn: &Connection,
     project_id: i64,
-    app_data_dir: &Path,
+    db: &AppDb,
 ) -> AppResult<Vec<TodoSummary>> {
     let now = Utc::now();
     let mut stmt = conn.prepare(
@@ -107,7 +105,7 @@ pub(super) fn todo_summaries(
                 (SELECT session_id FROM todo_provider_state WHERE todo_id = t.id AND provider = 'claude'),
                 p.working_directory, t.created_at, t.updated_at, t.description_panel_hidden,
                 t.execution_panel_hidden, t.description_toc_hidden, t.artifact_toc_hidden,
-                t.context_project_id
+                t.context_project_id, p.terminal_wsl_enabled
          FROM todos t
          JOIN projects p ON p.id = t.project_id
          WHERE (?1 = 0 OR t.project_id = ?1 OR t.id IN (SELECT id FROM linked_visible_todos))
@@ -147,6 +145,7 @@ pub(super) fn todo_summaries(
             row.get::<_, bool>(24)?,
             row.get::<_, bool>(25)?,
             row.get::<_, Option<i64>>(26)?,
+            row.get::<_, bool>(27)?,
         ))
     })?;
     let rows = rows.collect::<Result<Vec<_>, _>>()?;
@@ -202,13 +201,27 @@ pub(super) fn todo_summaries(
                 description_toc_hidden,
                 artifact_toc_hidden,
                 context_project_id,
+                terminal_wsl_enabled,
             )| {
                 let own_time_seconds = time_seconds_for_todo(conn, id, now)?;
                 let dependencies = dependency_summaries(conn, id)?;
                 let stale = todo_stale(conn, id, &state, &updated_at, now)?;
-                let artifact_path = todo_artifact_path(app_data_dir, project_id, &display_id);
-                let artifact_markdown =
-                    fs::read_to_string(&artifact_path).unwrap_or(artifact_markdown);
+                let artifact_location =
+                    db.todo_artifact_location(project_id, &display_id, terminal_wsl_enabled);
+                let (artifact_markdown, artifact_markdown_path) = match artifact_location {
+                    Ok(location) => (
+                        fs::read_to_string(&location.host_path).unwrap_or(artifact_markdown),
+                        location.markdown_path,
+                    ),
+                    Err(_) => (
+                        artifact_markdown,
+                        home_aliased_path(&todo_artifact_path(
+                            &db.app_data_dir,
+                            project_id,
+                            &display_id,
+                        )),
+                    ),
+                };
                 let effective_context_project_id = resolve_context_project(id);
                 let (effective_dir, _notes, _owner) = effective_project_dir_and_notes(
                     conn,
@@ -229,7 +242,7 @@ pub(super) fn todo_summaries(
                     description_markdown,
                     journal_markdown,
                     artifact_markdown,
-                    artifact_markdown_path: home_aliased_path(&artifact_path),
+                    artifact_markdown_path,
                     description_panel_hidden,
                     execution_panel_hidden,
                     description_toc_hidden,

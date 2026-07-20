@@ -69,6 +69,8 @@ function renderTopBar(overrides: Partial<TopBarProps> = {}) {
     onNewWorktreeTask: noop,
     onOpenAppSettings: noop,
     onOpenGlobalSearch: noop,
+    activeWorkspaceView: "tasks",
+    onWorkspaceViewSelect: noop,
     onOpenProjectActions: noop,
     onOpenProjectFolder: noop,
     onOpenProjectNotes: noop,
@@ -107,6 +109,19 @@ describe("TopBar project picker", () => {
     fireEvent.click(screen.getByLabelText("Open life in new window"));
 
     expect(onOpenProjectWindow).toHaveBeenCalledWith(projects[1]);
+  });
+
+  it("switches between the Tasks and Time Logs workspace tabs", () => {
+    const onWorkspaceViewSelect = vi.fn();
+    renderTopBar({ onWorkspaceViewSelect });
+
+    expect(screen.getByRole("tab", { name: "Tasks" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    fireEvent.click(screen.getByRole("tab", { name: "Time Logs" }));
+
+    expect(onWorkspaceViewSelect).toHaveBeenCalledWith("time");
   });
 
   it("requests terminal focus restoration before opening the project folder", () => {

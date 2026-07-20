@@ -11,3 +11,18 @@
 - If xterm's real input remains DOM-focused but local focus bookkeeping or a previous ownership claim failed, the next key must reconcile ownership instead of being silently dropped.
 - Recreating a focused xterm instance for a theme or setup change must blur the obsolete input and transfer focus and ownership to the replacement instance.
 - A focused terminal may retry a write once after the backend explicitly reports stale input ownership.
+
+## WSL artifact storage
+
+- On Windows, tasks in projects with `Run terminals in WSL` enabled must read, write, and open artifact Markdown under the default WSL distro user's home, using the same `~/AppData/Roaming/com.marklopez.boomerangtasks/artifacts/project-<id>/<display-id>.md` path given to agents.
+- WSL artifact paths shown in prompts must use forward slashes so they are directly usable in Linux shells.
+- Projects that do not run terminals in WSL continue storing artifacts in the host platform's app-data directory.
+
+## Time tracking
+
+- Tasks and Time Logs are explicit workspace tabs. Selecting Tasks restores the normal task workspace; selecting Time Logs opens the reporting page.
+- The Time Tracking page provides Today, This week, and This month filters. Week and month ranges start at the local calendar boundary and include time through today.
+- Its project filter includes every nested subproject and linked project, without counting a project twice when it is reachable through multiple links.
+- Task rows form a tree and show both task-only time and time rolled up from that task plus all subtasks.
+- The tree hides tasks with no time in the selected range, while retaining a zero-own-time parent when a descendant has time so the hierarchy stays understandable.
+- The page total counts each scoped task's own time once.

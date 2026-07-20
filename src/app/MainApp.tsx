@@ -58,6 +58,7 @@ import { useTitleGenerationTracking } from './titleGenerationState';
 import { EmptyDetail } from '../features/tasks/EmptyDetail';
 import { buildTaskRows, TaskList, type TaskListAccordionState } from '../features/tasks/TaskList';
 import { TopBar } from '../features/workspace/TopBar';
+import { TimeTrackingPage } from '../features/time/TimeTrackingPage';
 import {
   copyText,
   defaultProjectActions,
@@ -1800,6 +1801,7 @@ export function MainApp() {
       style={projectShellStyle}
     >
       <TopBar
+        activeWorkspaceView={search.view === 'time' ? 'time' : 'tasks'}
         canGoBack={historyNavigationState.canGoBack}
         canGoForward={historyNavigationState.canGoForward}
         canCreateTask={Boolean(taskProject)}
@@ -1836,6 +1838,17 @@ export function MainApp() {
         onNewWorktreeTask={openNewWorktreeTaskDialog}
         onOpenAppSettings={() => openOnlyTopLevelPopup(setAppSettingsOpen)}
         onOpenGlobalSearch={() => openOnlyTopLevelPopup(setGlobalSearchOpen)}
+        onWorkspaceViewSelect={(view) => {
+          closeTopLevelPopups();
+          void navigate({
+            search: (previous) => ({
+              ...previous,
+              focusedProjectId: undefined,
+              todoId: undefined,
+              view: view === 'time' ? 'time' : undefined,
+            }),
+          });
+        }}
         onOpenProjectFolder={() => {
           if (topBarActionProject) {
             const openFolderAction =
@@ -1883,7 +1896,15 @@ export function MainApp() {
           <FindOverlayIsland />
         </Suspense>
       ) : null}
-      <section
+      {search.view === 'time' && !taskWindowMode ? (
+        <TimeTrackingPage
+          onProjectSelect={selectProject}
+          onTaskSelect={selectTodo}
+          projects={data.projects}
+          selectedProjectId={selectedProjectId}
+          todos={data.todos}
+        />
+      ) : <section
         className={`workspace ${search.todoId || focusedProject ? 'detail-mode' : 'list-mode'} ${
           taskListSuppressed ? 'task-list-hidden' : ''
         }`}
@@ -1921,7 +1942,7 @@ export function MainApp() {
             onNewTask={() => openNewTaskDialog()}
           />
         )}
-      </section>
+      </section>}
       <Suspense fallback={null}>
         {deleteTasksDialog ? (
           <DeleteTasksOverlayIsland onConfirm={confirmDeleteTodos} todos={deleteDialogTodos} />

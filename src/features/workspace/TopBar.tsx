@@ -4,6 +4,7 @@ import {
   ChevronLeft,
   ChevronRight,
   ClipboardCopy,
+  Clock3,
   Command,
   ExternalLink,
   FileText,
@@ -12,6 +13,7 @@ import {
   FolderOpen,
   Home,
   Image,
+  ListTodo,
   type LucideIcon,
   Moon,
   Pencil,
@@ -59,6 +61,7 @@ type TopBarTimerSummary = NonNullable<AppSnapshot['runningTimer']> & {
 };
 
 export function TopBar({
+  activeWorkspaceView,
   canGoBack,
   canGoForward,
   canCreateTask,
@@ -78,6 +81,7 @@ export function TopBar({
   onNewWorktreeTask,
   onOpenAppSettings,
   onOpenGlobalSearch,
+  onWorkspaceViewSelect,
   onOpenProjectFolder,
   onOpenProjectActions,
   onOpenProjectNotes,
@@ -95,6 +99,7 @@ export function TopBar({
   runningTimer,
   themePreference,
 }: {
+  activeWorkspaceView: 'tasks' | 'time';
   canGoBack: boolean;
   canGoForward: boolean;
   canCreateTask: boolean;
@@ -114,6 +119,7 @@ export function TopBar({
   onNewWorktreeTask: () => void;
   onOpenAppSettings: () => void;
   onOpenGlobalSearch: () => void;
+  onWorkspaceViewSelect: (view: 'tasks' | 'time') => void;
   onOpenProjectFolder: () => void;
   onOpenProjectActions: () => void;
   onOpenProjectNotes: () => void;
@@ -564,6 +570,30 @@ export function TopBar({
           >
             <FolderCog size={15} />
           </AppButton>
+          <div aria-label="Workspace view" className="workspace-view-tabs" role="tablist">
+            <button
+              aria-selected={activeWorkspaceView === 'tasks'}
+              className={activeWorkspaceView === 'tasks' ? 'active' : undefined}
+              onClick={() => onWorkspaceViewSelect('tasks')}
+              role="tab"
+              title="Tasks"
+              type="button"
+            >
+              <ListTodo size={15} />
+              <span>Tasks</span>
+            </button>
+            <button
+              aria-selected={activeWorkspaceView === 'time'}
+              className={activeWorkspaceView === 'time' ? 'active' : undefined}
+              onClick={() => onWorkspaceViewSelect('time')}
+              role="tab"
+              title="Time Logs"
+              type="button"
+            >
+              <Clock3 size={15} />
+              <span>Time Logs</span>
+            </button>
+          </div>
           <AppButton
             aria-label="Open app settings"
             onClick={() => {

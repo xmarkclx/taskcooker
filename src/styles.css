@@ -937,6 +937,46 @@ button {
   gap: 8px;
 }
 
+.workspace-view-tabs {
+  align-items: center;
+  background: var(--color-surface-muted);
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+}
+
+.workspace-view-tabs button {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  display: flex;
+  font-size: 12px;
+  font-weight: 700;
+  gap: 5px;
+  min-height: 29px;
+  padding: 0 9px;
+}
+
+.workspace-view-tabs button:hover,
+.workspace-view-tabs button:focus-visible {
+  color: var(--color-text-strong);
+}
+
+.workspace-view-tabs button:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 1px;
+}
+
+.workspace-view-tabs button.active {
+  background: var(--color-primary);
+  color: var(--color-primary-contrast);
+}
+
 .history-controls {
   flex: 0 0 auto;
   gap: 4px;

@@ -18,6 +18,7 @@ export type AppSearch = {
   ptyId?: number;
   taskWindow?: boolean;
   terminalTitle?: string;
+  view?: 'tasks' | 'time';
 };
 
 export function parseAppSearch(search: Record<string, unknown>): AppSearch {
@@ -30,6 +31,7 @@ export function parseAppSearch(search: Record<string, unknown>): AppSearch {
     taskWindow: parseBooleanFlag(search.taskWindow),
     terminalTitle: parseOptionalText(search.terminalTitle),
     todoId: parsePositiveInteger(search.todoId),
+    view: search.view === 'time' ? 'time' : undefined,
   };
 }
 

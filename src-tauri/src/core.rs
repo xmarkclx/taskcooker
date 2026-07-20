@@ -3,7 +3,7 @@ use std::env;
 use std::fmt::{Display, Formatter};
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
+use std::sync::{Mutex, OnceLock};
 
 use chrono::{DateTime, Duration, Utc};
 use rusqlite::{params, Connection, OptionalExtension, Transaction};
@@ -59,6 +59,7 @@ impl From<std::io::Error> for AppError {
 pub struct AppDb {
     app_data_dir: PathBuf,
     conn: Mutex<Connection>,
+    wsl_home_dir: OnceLock<Result<PathBuf, String>>,
 }
 
 mod actions;
@@ -137,6 +138,7 @@ impl AppDb {
         Ok(Self {
             app_data_dir: env::temp_dir().join(format!("boomerang-tasks-{}", uuid::Uuid::new_v4())),
             conn: Mutex::new(conn),
+            wsl_home_dir: OnceLock::new(),
         })
     }
 
@@ -151,6 +153,7 @@ impl AppDb {
                 .unwrap_or_else(|| Path::new("."))
                 .to_path_buf(),
             conn: Mutex::new(conn),
+            wsl_home_dir: OnceLock::new(),
         })
     }
 
@@ -171,6 +174,7 @@ impl AppDb {
                 .unwrap_or_else(|| Path::new("."))
                 .to_path_buf(),
             conn: Mutex::new(conn),
+            wsl_home_dir: OnceLock::new(),
         })
     }
 
@@ -216,7 +220,7 @@ impl AppDb {
             .or(selected_todo_project_id)
             .or_else(|| projects.first().map(|project| project.id))
             .unwrap_or_default();
-        let mut todos = todo_summaries(&conn, 0, &self.app_data_dir)?;
+        let mut todos = todo_summaries(&conn, 0, self)?;
         let child_project_ids: HashSet<i64> = if selected_project_id == 0 {
             HashSet::new()
         } else {
