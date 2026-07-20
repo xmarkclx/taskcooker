@@ -448,6 +448,25 @@ mod tests {
             ]
         );
     }
+    
+    fn windows_task_title_generation_runs_script_shim_through_powershell() {
+        let process = ProcessCommandSpec {
+            display: "codex exec prompt".to_string(),
+            program: "codex".to_string(),
+            args: vec!["exec".to_string(), "A prompt with 'quotes'".to_string()],
+            cwd: r"E:\taskcooker".to_string(),
+        };
+
+        let (program, args) = task_title_process_launch_command(&process, true).unwrap();
+
+        assert!(program.to_ascii_lowercase().ends_with("powershell.exe"));
+        assert_eq!(&args[..3], ["-NoLogo", "-NoProfile", "-NonInteractive"]);
+        assert_eq!(args[3], "-Command");
+        assert_eq!(
+            args[4],
+            "& 'codex' 'exec' 'A prompt with ''quotes''' ; exit $LASTEXITCODE"
+        );
+    }
 
     #[test]
     fn blank_title_create_returns_fallback_and_pending_codex_generation() {
