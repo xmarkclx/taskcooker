@@ -165,6 +165,7 @@ function syncRichEditorEmptyState(editor: Editor | null | undefined) {
 export type MarkdownEditorProps = {
   ariaLabel: string;
   attachmentTarget?: AttachmentTarget;
+  autoFocus?: boolean;
   conflictLabel: string;
   fontFamily?: string;
   fontSize?: string;
@@ -190,6 +191,7 @@ export type MarkdownEditorProps = {
 export function MarkdownEditor({
   ariaLabel,
   attachmentTarget,
+  autoFocus = false,
   conflictLabel,
   fontFamily = DEFAULT_MARKDOWN_EDITOR_FONT_FAMILY,
   fontSize = DEFAULT_MARKDOWN_EDITOR_FONT_SIZE,
@@ -349,6 +351,7 @@ export function MarkdownEditor({
   };
 
   const editor = useEditor({
+    autofocus: autoFocus && mode === 'rich',
     content: normalizeMarkdownForEditor(markdown),
     contentType: 'markdown',
     editorProps: {
@@ -1032,6 +1035,7 @@ export function MarkdownEditor({
         {mode === 'raw' ? (
           <textarea
             aria-label={ariaLabel}
+            autoFocus={autoFocus}
             className="markdown-textarea"
             disabled={hasConflict}
             onChange={(event) => {

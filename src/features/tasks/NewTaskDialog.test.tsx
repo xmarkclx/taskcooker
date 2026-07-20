@@ -9,6 +9,40 @@ import { NewTaskDialog } from './NewTaskDialog';
 const appStyles = readFileSync(resolve(process.cwd(), 'src/styles.css'), 'utf8');
 
 describe('NewTaskDialog', () => {
+  it('focuses the description when opening task and subtask dialogs', async () => {
+    const taskDialog = render(
+      <NewTaskDialog
+        description="Create a task in tmatrix."
+        onClose={vi.fn()}
+        onSubmit={vi.fn()}
+        title="New task"
+      />,
+    );
+
+    await waitFor(() => {
+      expect(
+        taskDialog.container.querySelector('.tiptap-editor .ProseMirror'),
+      ).toHaveFocus();
+    });
+
+    taskDialog.unmount();
+
+    render(
+      <NewTaskDialog
+        description="Create a subtask under T-6."
+        markdownEditorMode="raw"
+        onClose={vi.fn()}
+        onSubmit={vi.fn()}
+        submitLabel="Create Subtask"
+        title="New subtask"
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('Task description Markdown')).toHaveFocus();
+    });
+  });
+
   it('keeps the modal form and description editor constrained to the visible viewport', () => {
     const dialogRule = cssRule('.new-task-dialog');
     const formRule = cssRule('.new-task-dialog .dialog-form');

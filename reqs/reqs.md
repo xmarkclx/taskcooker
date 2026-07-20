@@ -1,5 +1,9 @@
 # Product Requirements
 
+## Task creation focus
+
+- Opening the new task or new subtask dialog must place keyboard focus in the description editor, in both rich and raw editing modes.
+
 ## Terminal input focus
 
 - Opening a project folder from either the top bar or an execution panel must restore the active terminal's keyboard focus when the TaskCooker window returns.
