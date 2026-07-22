@@ -39,11 +39,14 @@ describe('buildTaskPrompt', () => {
     });
 
     expect(prompt).toContain(
-      'CRITICAL, NON-NEGOTIABLE, EVERY TURN: whenever you are actively working, T-123 MUST be Delegated, and the instant you finish replying it MUST be in Review — Ready to Test or Needs Feedback. Never end a reply with T-123 left in To Do, Doing, or Delegated. Every single time the user messages you about this task: FIRST set T-123 to Delegated, do the work, then set it to Ready to Test or Needs Feedback before you finish. No exceptions.',
+      'CRITICAL, NON-NEGOTIABLE, EVERY TURN: whenever you are actively working, T-123 MUST be Delegated, and the instant you finish replying it MUST be in "Ready to Test" or "Needs Feedback".',
+    );
+    expect(prompt).toContain(
+      'Never end a reply with T-123 left in To Do, Doing, or Delegated. Every single time the user messages you about this task: FIRST set T-123 to Delegated, do the work, then set it to Ready to Test or Needs Feedback before you finish. No exceptions.',
     );
   });
 
-  it('tells provider agents to pass known native conversation ids through the CLI', () => {
+  it('tells provider agents to pass known native conversation ids through the API', () => {
     const prompt = buildTaskPrompt({
       appSettings,
       binaryPath:
@@ -55,8 +58,44 @@ describe('buildTaskPrompt', () => {
     });
 
     expect(prompt).toContain(
-      'If Codex or Claude shows a native conversation/session id, include it on state/message calls: --conversation-id <id>.',
+      'If Codex or Claude shows a native conversation/session id, include it as the conversationId field in update_todo_state or message_todo arguments.',
     );
+  });
+
+  it('uses the Windows curl bridge from WSL without launching the TaskCooker executable', () => {
+    const prompt = buildTaskPrompt({
+      appSettings,
+      binaryPath: String.raw`C:\Users\xmark\AppData\Local\TaskCooker\boomerang-tasks.exe`,
+      includeProjectNotes: false,
+      project: { ...project, terminalWslEnabled: true },
+      taskDescriptionMode: 'task',
+      todo: makeTodo(),
+    });
+
+    expect(prompt).toContain('Use the Boomerang HTTP API for updates.');
+    expect(prompt).toContain('curl.exe --fail --silent --show-error');
+    expect(prompt).toContain(`--data-raw '{"id":1`);
+    expect(prompt).toContain('http://127.0.0.1:56810/mcp');
+    expect(prompt).toContain('Authorization: Bearer test-token');
+    expect(prompt).toContain('"name":"update_todo_state"');
+    expect(prompt).toContain('"name":"message_todo"');
+    expect(prompt).toContain('"name":"get_todo"');
+    expect(prompt).not.toContain('boomerang-tasks.exe');
+  });
+
+  it('uses curl.exe for native Windows API calls to avoid the PowerShell curl alias', () => {
+    const prompt = buildTaskPrompt({
+      appSettings,
+      binaryPath: String.raw`C:\Users\xmark\AppData\Local\TaskCooker\boomerang-tasks.exe`,
+      includeProjectNotes: false,
+      project,
+      taskDescriptionMode: 'task',
+      todo: makeTodo(),
+    });
+
+    expect(prompt).toContain('curl.exe --fail --silent --show-error');
+    expect(prompt).toContain(String.raw`--data-raw '{\"id\":1`);
+    expect(prompt).not.toContain('boomerang-tasks.exe');
   });
 
   it('shares the task artifact file and current artifact contents with every agent prompt', () => {

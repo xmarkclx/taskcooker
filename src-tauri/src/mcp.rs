@@ -523,14 +523,17 @@ fn build_cli_task_prompt(
         .iter()
         .find(|project| project.id == todo.project_id)
         .ok_or_else(|| "project not found in snapshot".to_string())?;
+    let (curl_program, escape_json_quotes) =
+        curl_command_for_terminal(project.terminal_wsl_enabled, cfg!(windows));
     Ok(format_cli_task_prompt(
         todo,
         project,
         &snapshot.todos,
         &snapshot.messages,
-        &snapshot.boomerang_binary_path,
+        curl_program,
         settings.mcp_port,
         &settings.mcp_token,
+        escape_json_quotes,
         additional_prompt,
     ))
 }
@@ -540,9 +543,10 @@ fn format_cli_task_prompt(
     project: &ProjectSummary,
     todos: &[TodoSummary],
     messages: &[MessageSummary],
-    binary_path: &str,
+    curl_program: &str,
     mcp_port: i64,
     mcp_token: &str,
+    escape_json_quotes: bool,
     additional_prompt: Option<&str>,
 ) -> String {
     let mut sections = vec![
@@ -565,21 +569,15 @@ fn format_cli_task_prompt(
         format!("- If blocked by an external dependency, set {} to Blocked and explain why.", todo.display_id),
         "- Read the task artifacts after the task description/context; use them as the durable summary before making changes.".to_string(),
         String::new(),
-        "Use the boomerang CLI for updates. Run these commands from a shell:".to_string(),
-        format!(
-            "- Set state: \"{}\" state \"Ready to Test\" -m \"what changed\" --todo {} --port {} --token {}",
-            binary_path, todo.display_id, mcp_port, mcp_token
-        ),
-        format!(
-            "- Leave a message: \"{}\" message \"your note\" --todo {} --port {} --token {}",
-            binary_path, todo.display_id, mcp_port, mcp_token
-        ),
-        format!(
-            "- Read this task and messages: \"{}\" get --todo {} --port {} --token {}",
-            binary_path, todo.display_id, mcp_port, mcp_token
-        ),
-        "Valid states: Icebox, To Do, Doing, Blocked, Delegated, Waiting, Ready to Test, Needs Feedback, Done, Archived.".to_string(),
     ];
+    sections.extend(boomerang_api_prompt_lines(
+        &todo.display_id,
+        mcp_port,
+        mcp_token,
+        curl_program,
+        escape_json_quotes,
+    ));
+    sections.push("Valid states: Icebox, To Do, Doing, Blocked, Delegated, Waiting, Ready to Test, Needs Feedback, Done, Archived.".to_string());
 
     let description_entries = if project.ai_task_description_mode == "ancestry" {
         let mut entries = parent_task_chain(todo, todos);
@@ -669,6 +667,75 @@ fn format_cli_task_prompt(
     }
 
     sections.join("\n")
+}
+
+fn curl_command_for_terminal(wsl_enabled: bool, windows: bool) -> (&'static str, bool) {
+    // WSL uses Windows curl to reach the loopback-only host service, but only
+    // native PowerShell needs JSON quotes escaped for Windows argv parsing.
+    if windows {
+        ("curl.exe", !wsl_enabled)
+    } else {
+        ("curl", false)
+    }
+}
+
+fn boomerang_api_prompt_lines(
+    task_id: &str,
+    port: i64,
+    token: &str,
+    curl_program: &str,
+    escape_json_quotes: bool,
+) -> Vec<String> {
+    let command = |tool_name: &str, arguments: Value| {
+        let body = json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": { "name": tool_name, "arguments": arguments },
+        })
+        .to_string();
+        let shell_body = if escape_json_quotes {
+            body.replace('"', "\\\"")
+        } else {
+            body
+        };
+        format!(
+            "{curl_program} --fail --silent --show-error --request POST \"http://127.0.0.1:{port}/mcp\" --header \"Authorization: Bearer {token}\" --header \"Content-Type: application/json\" --data-raw '{shell_body}'"
+        )
+    };
+
+    vec![
+        "Use the Boomerang HTTP API for updates. These requests work from native Windows and WSL without launching the TaskCooker executable:".to_string(),
+        format!(
+            "- Set state (optionally with a message): {}",
+            command(
+                "update_todo_state",
+                json!({
+                    "taskId": task_id,
+                    "state": "Ready to Test",
+                    "message": "what changed",
+                    "senderName": "Agent API",
+                }),
+            )
+        ),
+        format!(
+            "- Leave a message (optionally include a state): {}",
+            command(
+                "message_todo",
+                json!({
+                    "taskId": task_id,
+                    "message": "your note",
+                    "senderName": "Agent API",
+                }),
+            )
+        ),
+        format!(
+            "- Read this task and its messages: {}",
+            command("get_todo", json!({ "taskId": task_id }))
+        ),
+        "- If Codex or Claude shows a native conversation/session id, include it as the conversationId field in update_todo_state or message_todo arguments.".to_string(),
+        "- When Boomerang started this session, the API port and token are also available in BOOMERANG_MCP_PORT and BOOMERANG_MCP_TOKEN.".to_string(),
+    ]
 }
 
 fn parent_task_chain<'a>(todo: &TodoSummary, todos: &'a [TodoSummary]) -> Vec<&'a TodoSummary> {
@@ -781,6 +848,28 @@ fn remove_journal_markdown(value: &mut Value) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn agent_prompt_uses_the_loopback_api_without_launching_taskcooker() {
+        let lines = boomerang_api_prompt_lines("T-30", 58179, "test-token", "curl.exe", true);
+        let prompt = lines.join("\n");
+
+        assert!(prompt.contains("Use the Boomerang HTTP API for updates."));
+        assert!(prompt.contains("curl.exe --fail --silent --show-error"));
+        assert!(prompt.contains("http://127.0.0.1:58179/mcp"));
+        assert!(prompt.contains("Authorization: Bearer test-token"));
+        assert!(prompt.contains(r#"\"name\":\"update_todo_state\""#));
+        assert!(prompt.contains(r#"\"name\":\"message_todo\""#));
+        assert!(prompt.contains(r#"\"name\":\"get_todo\""#));
+        assert!(!prompt.contains("boomerang-tasks"));
+    }
+
+    #[test]
+    fn wsl_agent_prompt_uses_the_windows_curl_bridge() {
+        assert_eq!(curl_command_for_terminal(true, true), ("curl.exe", false));
+        assert_eq!(curl_command_for_terminal(false, true), ("curl.exe", true));
+        assert_eq!(curl_command_for_terminal(false, false), ("curl", false));
+    }
 
     #[test]
     fn agent_safe_todo_values_omit_private_journal_markdown() {

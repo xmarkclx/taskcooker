@@ -14,6 +14,14 @@ use super::{
 
 const CODEX_SPARK_MODEL: &str = "gpt-5.3-codex-spark";
 const TASK_TITLE_GENERATION_TIMEOUT: Duration = Duration::from_secs(45);
+const CREATE_NO_WINDOW: u32 = 0x08000000;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct TaskTitleProcessLaunch {
+    program: String,
+    args: Vec<String>,
+    windows_creation_flags: u32,
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TaskTitleGenerationRequest {
@@ -229,18 +237,22 @@ fn run_process_with_timeout(
     // GUI-launched apps inherit launchd's minimal PATH, which misses Homebrew
     // and user bin directories where a bare `codex` usually lives.
     let path = crate::pty::usable_cli_path(std::env::var("PATH").ok().as_deref());
-    #[cfg(windows)]
-    let (program, args) =
-        process_command_for_windows(process, &crate::pty::windows_terminal_shell_path());
-    #[cfg(not(windows))]
-    let (program, args) = (process.program.clone(), process.args.clone());
-    let mut child = Command::new(program)
-        .args(args)
+    let launch = task_title_process_launch_command(process, cfg!(windows));
+    let mut command = Command::new(&launch.program);
+    command
+        .args(&launch.args)
         .current_dir(&process.cwd)
         .env("PATH", path)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
+        .stderr(Stdio::piped());
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+
+        command.creation_flags(launch.windows_creation_flags);
+    }
+    let mut child = command
         .spawn()
         .map_err(|err| format!("failed to start task title generator: {err}"))?;
     let started_at = Instant::now();
@@ -263,6 +275,23 @@ fn run_process_with_timeout(
         }
 
         thread::sleep(Duration::from_millis(100));
+    }
+}
+
+fn task_title_process_launch_command(
+    process: &ProcessCommandSpec,
+    windows: bool,
+) -> TaskTitleProcessLaunch {
+    let (program, args) = if windows {
+        process_command_for_windows(process, &crate::pty::windows_terminal_shell_path())
+    } else {
+        (process.program.clone(), process.args.clone())
+    };
+
+    TaskTitleProcessLaunch {
+        program,
+        args,
+        windows_creation_flags: if windows { CREATE_NO_WINDOW } else { 0 },
     }
 }
 
@@ -428,9 +457,7 @@ mod tests {
 
         let (program, args) = process_command_for_windows(
             &process,
-            Path::new(
-                r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe",
-            ),
+            Path::new(r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"),
         );
 
         assert_eq!(
@@ -448,8 +475,9 @@ mod tests {
             ]
         );
     }
-    
-    fn windows_task_title_generation_runs_script_shim_through_powershell() {
+
+    #[test]
+    fn windows_task_title_generation_runs_silently_through_powershell() {
         let process = ProcessCommandSpec {
             display: "codex exec prompt".to_string(),
             program: "codex".to_string(),
@@ -457,15 +485,38 @@ mod tests {
             cwd: r"E:\taskcooker".to_string(),
         };
 
-        let (program, args) = task_title_process_launch_command(&process, true).unwrap();
+        let launch = task_title_process_launch_command(&process, true);
 
-        assert!(program.to_ascii_lowercase().ends_with("powershell.exe"));
-        assert_eq!(&args[..3], ["-NoLogo", "-NoProfile", "-NonInteractive"]);
-        assert_eq!(args[3], "-Command");
+        assert!(launch
+            .program
+            .to_ascii_lowercase()
+            .ends_with("powershell.exe"));
         assert_eq!(
-            args[4],
+            &launch.args[..3],
+            ["-NoLogo", "-NoProfile", "-NonInteractive"]
+        );
+        assert_eq!(launch.args[3], "-Command");
+        assert_eq!(
+            launch.args[4],
             "& 'codex' 'exec' 'A prompt with ''quotes''' ; exit $LASTEXITCODE"
         );
+        assert_eq!(launch.windows_creation_flags, CREATE_NO_WINDOW);
+    }
+
+    #[test]
+    fn non_windows_task_title_generation_keeps_the_direct_command() {
+        let process = ProcessCommandSpec {
+            display: "codex exec prompt".to_string(),
+            program: "/opt/homebrew/bin/codex".to_string(),
+            args: vec!["exec".to_string(), "A prompt".to_string()],
+            cwd: "/tmp/taskcooker".to_string(),
+        };
+
+        let launch = task_title_process_launch_command(&process, false);
+
+        assert_eq!(launch.program, process.program);
+        assert_eq!(launch.args, process.args);
+        assert_eq!(launch.windows_creation_flags, 0);
     }
 
     #[test]

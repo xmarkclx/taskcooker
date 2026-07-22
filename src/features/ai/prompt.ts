@@ -33,6 +33,7 @@ export function buildTaskPrompt({
   todos = [],
 }: BuildTaskPromptInput): string {
   const descriptionEntries = taskDescriptionEntries(todo, todos, taskDescriptionMode);
+  const curlCommand = curlCommandForTerminal(binaryPath, project.terminalWslEnabled);
   const attachmentPaths = uniquePaths(
     descriptionEntries.flatMap((entry) => extractLocalMarkdownImagePaths(entry.descriptionMarkdown)),
   );
@@ -63,12 +64,13 @@ export function buildTaskPrompt({
     `- Read the task artifacts before the task description/context; use them as the durable summary of what is going on before you start making changes.`,
     `- Start working on this task now without waiting for further input. Briefly note whether you were passed the project note and (task description or all parents' task descriptions), then proceed.`,
     '',
-    'Use the boomerang CLI for updates. Run these commands from a shell:',
-    `- Set state (optionally with a message): "${binaryPath}" state "Ready to Test" -m "what changed" --todo ${todo.displayId} --port ${appSettings.mcpPort} --token ${appSettings.mcpToken}`,
-    `- Leave a message (optionally also set state with -s): "${binaryPath}" message "your note" --todo ${todo.displayId} --port ${appSettings.mcpPort} --token ${appSettings.mcpToken}`,
-    `- Read this task and its messages: "${binaryPath}" get --todo ${todo.displayId} --port ${appSettings.mcpPort} --token ${appSettings.mcpToken}`,
-    `- If Codex or Claude shows a native conversation/session id, include it on state/message calls: --conversation-id <id>.`,
-    `- When Boomerang started this session, --todo/--port/--token default from the BOOMERANG_* environment variables, so you can omit them.`,
+    ...boomerangApiPromptLines(
+      todo.displayId,
+      appSettings.mcpPort,
+      appSettings.mcpToken,
+      curlCommand.program,
+      curlCommand.escapeJsonQuotes,
+    ),
     'Valid states: Icebox, To Do, Doing, Blocked, Delegated, Waiting, Ready to Test, Needs Feedback, Done, Archived.',
   ];
 
@@ -192,6 +194,56 @@ function formatTaskDescriptionSection(
 
 function uniquePaths(paths: string[]): string[] {
   return [...new Set(paths)];
+}
+
+function curlCommandForTerminal(
+  binaryPath: string,
+  terminalWslEnabled: boolean,
+): { escapeJsonQuotes: boolean; program: string } {
+  const windowsHost = /^[a-zA-Z]:[\\/]/.test(binaryPath);
+  // WSL uses Windows curl to reach the loopback-only host service, but only
+  // native PowerShell needs JSON quotes escaped for Windows argv parsing.
+  return {
+    escapeJsonQuotes: windowsHost && !terminalWslEnabled,
+    program: windowsHost ? 'curl.exe' : 'curl',
+  };
+}
+
+function boomerangApiPromptLines(
+  taskId: string,
+  port: number,
+  token: string,
+  curlProgram: string,
+  escapeJsonQuotes: boolean,
+): string[] {
+  const command = (toolName: string, argumentsValue: Record<string, string>): string => {
+    const body = JSON.stringify({
+      id: 1,
+      jsonrpc: '2.0',
+      method: 'tools/call',
+      params: { arguments: argumentsValue, name: toolName },
+    });
+    const shellBody = escapeJsonQuotes ? body.replaceAll('"', '\\"') : body;
+    return `${curlProgram} --fail --silent --show-error --request POST "http://127.0.0.1:${port}/mcp" --header "Authorization: Bearer ${token}" --header "Content-Type: application/json" --data-raw '${shellBody}'`;
+  };
+
+  return [
+    'Use the Boomerang HTTP API for updates. These requests work from native Windows and WSL without launching the TaskCooker executable:',
+    `- Set state (optionally with a message): ${command('update_todo_state', {
+      taskId,
+      state: 'Ready to Test',
+      message: 'what changed',
+      senderName: 'Agent API',
+    })}`,
+    `- Leave a message (optionally include a state): ${command('message_todo', {
+      taskId,
+      message: 'your note',
+      senderName: 'Agent API',
+    })}`,
+    `- Read this task and its messages: ${command('get_todo', { taskId })}`,
+    '- If Codex or Claude shows a native conversation/session id, include it as the conversationId field in update_todo_state or message_todo arguments.',
+    '- When Boomerang started this session, the API port and token are also available in BOOMERANG_MCP_PORT and BOOMERANG_MCP_TOKEN.',
+  ];
 }
 
 export function buildClaudeDesktopDeepLink(prompt: string, workingDirectory: string): string {

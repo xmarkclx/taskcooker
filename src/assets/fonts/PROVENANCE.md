@@ -4,8 +4,7 @@ This directory vendors a Nerd Fonts-patched version of **JetBrains Mono** so the
 embedded xterm.js terminal renders CLI icons and powerline glyphs (e.g. nvim,
 starship, lazygit) on machines that do not have a Nerd Font installed.
 
-Vendoring follows the conditions in `reqs/reqs.md` and `rules/frontend.md`:
-the upstream source release is pinned below and the complete third-party
+The upstream source release is pinned below and the complete third-party
 license is included alongside (`LICENSE-OFL.txt`).
 
 ## Source (pinned)

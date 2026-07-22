@@ -1,6 +1,6 @@
 # Frontend Rules
 
-Use React + TypeScript with Tailwind, shadcn/ui primitives, TanStack Router, TanStack Query, Jotai, TanStack Form, TanStack Virtual, Motion for React, Tiptap, and xterm where required by `reqs/reqs.md`.
+Use React + TypeScript with Tailwind, shadcn/ui primitives, TanStack Router, TanStack Query, Jotai, TanStack Form, TanStack Virtual, Motion for React, Tiptap, and xterm.
 
 ## State Ownership
 

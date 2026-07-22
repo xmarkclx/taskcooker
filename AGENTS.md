@@ -17,7 +17,6 @@ Before changing code, read:
 
 - Keep code clean, typed, small, and easy for humans to edit.
 - Treat the requirements as product truth. If requirements conflict with code, update the code or call out the conflict.
-- Keep `reqs/reqs.md` current as product decisions are clarified during implementation; do not leave newly discovered requirements only in chat or code.
 - Never reinstall, replace, relaunch, quit, or otherwise disturb the installed/running app unless Mark explicitly asks for that exact operation in the current turn. Mark may have important work running in app-owned processes.
 - Do not invent package APIs, Tauri permissions, schema fields, command names, query keys, or design tokens. Verify them from local files, type definitions, existing examples, or official documentation.
 - When unsure, inspect examples in this repo first. If no local example exists, check official documentation.

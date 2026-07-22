@@ -14,12 +14,11 @@ use tauri::{AppHandle, Emitter, Manager, State};
 use tauri_plugin_opener::OpenerExt;
 
 use crate::core::{
-    current_binary_path, expand_home_alias, home_aliased_path, todo_artifact_path,
-    ActionRunSummary, Actor, AppDb, AppSettingsSummary, AppSnapshot, ExecutionTerminalSummary,
-    NewActionRun, NewAgentSession, NewProject, ProjectActionSummary,
-    ProjectActionsDirectorySummary, ProjectPromptSettingsUpdate, ProjectSettingsUpdate,
-    TodoWorktreeStatusSummary, UpdateTodoStarred, UpdateTodoState, UpdateTodosState,
-    WorktreeNameSuggestion,
+    expand_home_alias, home_aliased_path, todo_artifact_path, ActionRunSummary, Actor, AppDb,
+    AppSettingsSummary, AppSnapshot, ExecutionTerminalSummary, NewActionRun, NewAgentSession,
+    NewProject, ProjectActionSummary, ProjectActionsDirectorySummary, ProjectPromptSettingsUpdate,
+    ProjectSettingsUpdate, TodoWorktreeStatusSummary, UpdateTodoStarred, UpdateTodoState,
+    UpdateTodosState, WorktreeNameSuggestion,
 };
 use crate::mcp::McpServerState;
 use crate::pty::{PtySpawnSpec, PtyState};
@@ -539,6 +538,7 @@ pub fn start_agent_session(
     let todo = state.get_todo(input.todo_id).map_err(command_error)?;
     let project = state.get_project(todo.project_id).map_err(command_error)?;
     let settings = state.app_settings().map_err(command_error)?;
+    require_agent_api(settings.mcp_enabled)?;
     let working_directory = state
         .todo_working_directory(todo.id)
         .map_err(command_error)?;
@@ -576,6 +576,18 @@ pub fn start_agent_session(
                 (
                     "BOOMERANG_TODO_DISPLAY_ID".to_string(),
                     todo.display_id.clone(),
+                ),
+                (
+                    "BOOMERANG_MCP_PORT".to_string(),
+                    settings.mcp_port.to_string(),
+                ),
+                (
+                    "BOOMERANG_MCP_TOKEN".to_string(),
+                    settings.mcp_token.clone(),
+                ),
+                (
+                    "BOOMERANG_MCP_URL".to_string(),
+                    format!("http://127.0.0.1:{}/mcp", settings.mcp_port),
                 ),
             ],
             wsl_enabled: project.terminal_wsl_enabled,
@@ -635,6 +647,9 @@ pub fn start_execution_terminal_from_app(
         ));
     }
     let kind = normalized_execution_terminal_kind(&input.kind)?;
+    if matches!(kind.as_str(), "omp" | "codex" | "claude") {
+        require_agent_api(settings.mcp_enabled)?;
+    }
     let conversation_id = if matches!(kind.as_str(), "terminal" | "omp" | "codex" | "claude") {
         None
     } else {
@@ -696,7 +711,10 @@ pub fn start_execution_terminal_from_app(
             "BOOMERANG_MCP_TOKEN".to_string(),
             settings.mcp_token.clone(),
         ),
-        ("BOOMERANG_BIN".to_string(), current_binary_path()),
+        (
+            "BOOMERANG_MCP_URL".to_string(),
+            format!("http://127.0.0.1:{}/mcp", settings.mcp_port),
+        ),
     ];
     if let Some(conversation_id) = conversation_id.as_deref() {
         env.push((
@@ -1945,6 +1963,17 @@ fn normalized_execution_terminal_kind(kind: &str) -> Result<String, String> {
     }
 }
 
+fn require_agent_api(enabled: bool) -> Result<(), String> {
+    if enabled {
+        Ok(())
+    } else {
+        Err(
+            "Boomerang HTTP API is disabled. Enable the MCP server in App Settings before starting an agent."
+                .to_string(),
+        )
+    }
+}
+
 fn execution_terminal_label(kind: &str) -> &'static str {
     match kind {
         "codex" => "Codex CLI",
@@ -2981,6 +3010,15 @@ mod tests {
     #[test]
     fn provider_prompt_submit_delay_gives_codex_time_to_commit_pasted_prompt() {
         assert!(PROVIDER_PROMPT_SUBMIT_DELAY >= Duration::from_millis(1_000));
+    }
+
+    #[test]
+    fn agent_launch_requires_the_loopback_api_to_be_enabled() {
+        assert!(require_agent_api(true).is_ok());
+        assert_eq!(
+            require_agent_api(false),
+            Err("Boomerang HTTP API is disabled. Enable the MCP server in App Settings before starting an agent.".to_string())
+        );
     }
 
     #[test]
