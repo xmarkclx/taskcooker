@@ -175,7 +175,7 @@ export function matchesTaskFilter(
 }
 
 export function isTasksFilterTodo(todo: TodoSummary): boolean {
-  return !['Blocked', 'Waiting', 'Done', 'Archived'].includes(todo.state);
+  return todo.state !== 'Done' && todo.state !== 'Archived';
 }
 
 export function isReviewFilterTodo(

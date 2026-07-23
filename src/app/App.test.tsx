@@ -1092,8 +1092,8 @@ describe('Boomerang app shell', () => {
 
     await screen.findByRole('button', { name: /wire up mcp server/i });
     expect(
-      screen.queryByRole('button', { name: /wait for api credentials/i }),
-    ).not.toBeInTheDocument();
+      screen.getByRole('button', { name: /wait for api credentials/i }),
+    ).toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText('Filter by state'), {
       target: { value: 'Waiting' },
@@ -1604,6 +1604,52 @@ describe('Boomerang app shell', () => {
       await within(taskList).findByRole('button', {
         name: /set up sqlite migrations/i,
       }),
+    ).toBeInTheDocument();
+  });
+
+  it('hides only Done and Archived states in tree view', async () => {
+    const baseTodo = seedSnapshot.todos.find((todo) => todo.id === 133)!;
+    vi.spyOn(tauriCommands, 'loadAppSnapshot').mockResolvedValue({
+      ...seedSnapshot,
+      todos: [
+        ...seedSnapshot.todos,
+        ...([
+          ['Blocked', 'Blocked tree task'],
+          ['Waiting', 'Waiting tree task'],
+          ['Done', 'Done tree task'],
+          ['Archived', 'Archived tree task'],
+        ] as const).map(([state, title], index) => ({
+          ...baseTodo,
+          id: 900 + index,
+          displayId: `T-${900 + index}`,
+          position: 900 + index,
+          state,
+          title,
+        })),
+      ],
+    });
+
+    renderApp('/?projectId=1&todoId=128');
+
+    const taskList = await screen.findByRole('complementary', {
+      name: 'Task list',
+    });
+    expect(
+      await within(taskList).findByRole('button', { name: /blocked tree task/i }),
+    ).toBeInTheDocument();
+    expect(
+      within(taskList).getByRole('button', { name: /waiting tree task/i }),
+    ).toBeInTheDocument();
+    expect(
+      within(taskList).queryByRole('button', { name: /done tree task/i }),
+    ).not.toBeInTheDocument();
+    expect(
+      within(taskList).queryByRole('button', { name: /archived tree task/i }),
+    ).not.toBeInTheDocument();
+
+    fireEvent.click(within(taskList).getByRole('button', { name: 'Filter tasks' }));
+    expect(
+      await within(taskList).findByRole('menuitem', { name: 'Tasks 8' }),
     ).toBeInTheDocument();
   });
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import type { TodoSummary } from '../../domain/domain';
+import { TODO_STATES, type TodoSummary } from '../../domain/domain';
 import { filterTasks, sortTasks } from './workspaceHelpers';
 
 describe('workspace helpers', () => {
@@ -65,6 +65,8 @@ describe('workspace helpers', () => {
       'Parent with open child',
       'To Do without dependency',
       'Delegated task',
+      'Blocked task',
+      'Waiting task',
     ]);
     expect(filterTasks(todos, 'review', '', '', '').map((item) => item.title)).toEqual([
       'Ready task',
@@ -88,6 +90,21 @@ describe('workspace helpers', () => {
     expect(filterTasks(todos, 'tasks', 'Done', '', '').map((item) => item.title)).toEqual([
       'Finished task',
     ]);
+  });
+
+  it('hides only Done and Archived tasks from the Tasks filter', () => {
+    const todos = TODO_STATES.map((state, index) =>
+      todo({
+        id: index + 1,
+        priority: 'Medium',
+        state,
+        title: `${state} task`,
+      }),
+    );
+
+    expect(
+      filterTasks(todos, 'tasks', '', '', '').map((item) => item.state),
+    ).toEqual(TODO_STATES.filter((state) => state !== 'Done' && state !== 'Archived'));
   });
 
   it('optionally filters delegated tasks out of any task list filter', () => {
