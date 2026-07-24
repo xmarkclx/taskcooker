@@ -87,8 +87,8 @@ importers:
         specifier: 2.1.1
         version: 2.1.1
       dompurify:
-        specifier: ^3.4.11
-        version: 3.4.11
+        specifier: ^3.4.12
+        version: 3.4.12
       framer-motion:
         specifier: 12.40.0
         version: 12.40.0(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
@@ -1544,8 +1544,8 @@ packages:
   dom-accessibility-api@0.6.3:
     resolution: {integrity: sha512-7ZgogeTnjuHbo+ct10G9Ffp0mif17idi0IyWNVA/wcwcm7NPOD/WEHVP3n7n3MhXqxoIYm8d6MuZohYWIZ4T3w==}
 
-  dompurify@3.4.11:
-    resolution: {integrity: sha512-zhlUV12GsaRzMsf9q5M254YhA4+VuF0fG+QFqu6aYpoGlKtz+w8//jBcGVYBgQkR5GHjUomejY84AV+/uPbWdw==}
+  dompurify@3.4.12:
+    resolution: {integrity: sha512-zQvGet8Z2sWbQhCmfFz/T5QWH2oBmjnqK3qvOjaqaNLrLEF912WamU+ohnTp0TCep/MFVHpdJuCZEdFOdTnEFg==}
 
   enhanced-resolve@5.21.6:
     resolution: {integrity: sha512-aNnGCvbJ/RIyWo1IuhNdVjnNF+EjH9wpzpNHt+ci/m9He9LJvUN8wrCcXjp9cWsGNAuvSpVFTx/vraAFQ8qGjQ==}
@@ -1973,8 +1973,18 @@ packages:
     peerDependencies:
       seroval: ^1.0
 
+  seroval-plugins@1.5.6:
+    resolution: {integrity: sha512-HXuLAX2pu/UByPpaeo/TaMfvMIi+1QqIoPJYCcAtU8QkVNwgR6MPlGuCQTErV1JwraaMbYaWVIBX7mppzGLATQ==}
+    engines: {node: '>=10'}
+    peerDependencies:
+      seroval: ^1.0
+
   seroval@1.5.4:
     resolution: {integrity: sha512-46uFvgrXTVxZcUorgSSRZ4y+ieqLLQRMlG4bnCZKW3qI6BZm7Rg4ntMW4p1mILEEBZWrFlcpp0AyIIlM6jD9iw==}
+    engines: {node: '>=10'}
+
+  seroval@1.5.6:
+    resolution: {integrity: sha512-rVQVWjjSvlINzaQPZH5JFqsqEsIWdTxY3iJZCnTL/5gQbXIRooVZKI60tVCkOVfzcRPejboxO2t0P89dg5mQaA==}
     engines: {node: '>=10'}
 
   shell-quote@1.9.0:
@@ -3172,7 +3182,7 @@ snapshots:
 
   '@types/dompurify@3.2.0':
     dependencies:
-      dompurify: 3.4.11
+      dompurify: 3.4.12
 
   '@types/estree@1.0.9': {}
 
@@ -3514,7 +3524,7 @@ snapshots:
 
   dom-accessibility-api@0.6.3: {}
 
-  dompurify@3.4.11:
+  dompurify@3.4.12:
     optionalDependencies:
       '@types/trusted-types': 2.0.7
 
@@ -3723,7 +3733,7 @@ snapshots:
       d3-sankey: 0.12.3
       dagre-d3-es: 7.0.14
       dayjs: 1.11.21
-      dompurify: 3.4.11
+      dompurify: 3.4.12
       es-toolkit: 1.49.0
       katex: 0.16.47
       khroma: 2.1.0
@@ -3954,7 +3964,13 @@ snapshots:
     dependencies:
       seroval: 1.5.4
 
+  seroval-plugins@1.5.6(seroval@1.5.6):
+    dependencies:
+      seroval: 1.5.6
+
   seroval@1.5.4: {}
+
+  seroval@1.5.6: {}
 
   shell-quote@1.9.0: {}
 
@@ -3963,8 +3979,8 @@ snapshots:
   solid-js@1.9.13:
     dependencies:
       csstype: 3.2.3
-      seroval: 1.5.4
-      seroval-plugins: 1.5.4(seroval@1.5.4)
+      seroval: 1.5.6
+      seroval-plugins: 1.5.6(seroval@1.5.6)
 
   source-map-js@1.2.1: {}
 
