@@ -16,6 +16,41 @@ describe('AppSettingsDialog', () => {
     expect(css).toMatch(/\.app-settings-dialog\s*{[^}]*overflow:\s*auto;/);
   });
 
+  it('shows connect URLs when network serving is enabled', () => {
+    render(
+      <AppSettingsDialog
+        networkServerAddresses={['192.168.1.20', '100.101.102.103']}
+        onClose={vi.fn()}
+        onCopyToken={vi.fn()}
+        onRegenerateToken={vi.fn()}
+        onSubmit={vi.fn()}
+        settings={{
+          ...fallbackAppSettings,
+          networkServerEnabled: true,
+          networkServerPort: 8790,
+        }}
+      />,
+    );
+
+    expect(screen.getByText('http://192.168.1.20:8790')).toBeInTheDocument();
+    expect(screen.getByText('http://100.101.102.103:8790')).toBeInTheDocument();
+  });
+
+  it('hides connect URLs while network serving is disabled', () => {
+    render(
+      <AppSettingsDialog
+        networkServerAddresses={['192.168.1.20']}
+        onClose={vi.fn()}
+        onCopyToken={vi.fn()}
+        onRegenerateToken={vi.fn()}
+        onSubmit={vi.fn()}
+        settings={{ ...fallbackAppSettings, networkServerEnabled: false }}
+      />,
+    );
+
+    expect(screen.queryByText('http://192.168.1.20:8790')).not.toBeInTheDocument();
+  });
+
   it('submits the selected task titler with app settings', async () => {
     const onSubmit = vi.fn();
 
@@ -44,6 +79,8 @@ describe('AppSettingsDialog', () => {
         markdownEditorFontSize: fallbackAppSettings.markdownEditorFontSize,
         markdownEditorMaxImageHeight: fallbackAppSettings.markdownEditorMaxImageHeight,
         mcpEnabled: fallbackAppSettings.mcpEnabled,
+        networkServerEnabled: fallbackAppSettings.networkServerEnabled,
+        networkServerPort: fallbackAppSettings.networkServerPort,
         projectAccentBorderWidth: fallbackAppSettings.projectAccentBorderWidth,
         slowdownProfilerEnabled: fallbackAppSettings.slowdownProfilerEnabled,
         terminalTmuxEnabled: fallbackAppSettings.terminalTmuxEnabled,
@@ -82,6 +119,8 @@ describe('AppSettingsDialog', () => {
         markdownEditorFontSize: fallbackAppSettings.markdownEditorFontSize,
         markdownEditorMaxImageHeight: fallbackAppSettings.markdownEditorMaxImageHeight,
         mcpEnabled: fallbackAppSettings.mcpEnabled,
+        networkServerEnabled: fallbackAppSettings.networkServerEnabled,
+        networkServerPort: fallbackAppSettings.networkServerPort,
         projectAccentBorderWidth: fallbackAppSettings.projectAccentBorderWidth,
         slowdownProfilerEnabled: false,
         terminalTmuxEnabled: fallbackAppSettings.terminalTmuxEnabled,
@@ -122,6 +161,8 @@ describe('AppSettingsDialog', () => {
         markdownEditorFontSize: fallbackAppSettings.markdownEditorFontSize,
         markdownEditorMaxImageHeight: fallbackAppSettings.markdownEditorMaxImageHeight,
         mcpEnabled: fallbackAppSettings.mcpEnabled,
+        networkServerEnabled: fallbackAppSettings.networkServerEnabled,
+        networkServerPort: fallbackAppSettings.networkServerPort,
         projectAccentBorderWidth: 6,
         slowdownProfilerEnabled: fallbackAppSettings.slowdownProfilerEnabled,
         terminalTmuxEnabled: fallbackAppSettings.terminalTmuxEnabled,
@@ -168,6 +209,8 @@ describe('AppSettingsDialog', () => {
         markdownEditorFontSize: 'clamp(14px, 1.2vw, 20px)',
         markdownEditorMaxImageHeight: '42vh',
         mcpEnabled: fallbackAppSettings.mcpEnabled,
+        networkServerEnabled: fallbackAppSettings.networkServerEnabled,
+        networkServerPort: fallbackAppSettings.networkServerPort,
         projectAccentBorderWidth: fallbackAppSettings.projectAccentBorderWidth,
         slowdownProfilerEnabled: fallbackAppSettings.slowdownProfilerEnabled,
         terminalTmuxEnabled: fallbackAppSettings.terminalTmuxEnabled,
@@ -208,6 +251,8 @@ describe('AppSettingsDialog', () => {
         markdownEditorFontSize: fallbackAppSettings.markdownEditorFontSize,
         markdownEditorMaxImageHeight: fallbackAppSettings.markdownEditorMaxImageHeight,
         mcpEnabled: fallbackAppSettings.mcpEnabled,
+        networkServerEnabled: fallbackAppSettings.networkServerEnabled,
+        networkServerPort: fallbackAppSettings.networkServerPort,
         projectAccentBorderWidth: fallbackAppSettings.projectAccentBorderWidth,
         slowdownProfilerEnabled: fallbackAppSettings.slowdownProfilerEnabled,
         terminalTmuxEnabled: fallbackAppSettings.terminalTmuxEnabled,
@@ -249,6 +294,8 @@ describe('AppSettingsDialog', () => {
         markdownEditorFontSize: fallbackAppSettings.markdownEditorFontSize,
         markdownEditorMaxImageHeight: fallbackAppSettings.markdownEditorMaxImageHeight,
         mcpEnabled: fallbackAppSettings.mcpEnabled,
+        networkServerEnabled: fallbackAppSettings.networkServerEnabled,
+        networkServerPort: fallbackAppSettings.networkServerPort,
         projectAccentBorderWidth: fallbackAppSettings.projectAccentBorderWidth,
         slowdownProfilerEnabled: fallbackAppSettings.slowdownProfilerEnabled,
         terminalTmuxEnabled: true,
@@ -289,6 +336,8 @@ describe('AppSettingsDialog', () => {
         markdownEditorFontSize: fallbackAppSettings.markdownEditorFontSize,
         markdownEditorMaxImageHeight: fallbackAppSettings.markdownEditorMaxImageHeight,
         mcpEnabled: fallbackAppSettings.mcpEnabled,
+        networkServerEnabled: fallbackAppSettings.networkServerEnabled,
+        networkServerPort: fallbackAppSettings.networkServerPort,
         projectAccentBorderWidth: fallbackAppSettings.projectAccentBorderWidth,
         slowdownProfilerEnabled: fallbackAppSettings.slowdownProfilerEnabled,
         terminalTmuxEnabled: fallbackAppSettings.terminalTmuxEnabled,

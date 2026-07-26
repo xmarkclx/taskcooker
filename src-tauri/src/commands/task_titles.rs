@@ -655,6 +655,8 @@ mod tests {
             terminal_tmux_enabled: false,
             external_terminal_openers: "open -na Ghostty.app --args --command={tmuxCommand}"
                 .to_string(),
+            network_server_enabled: false,
+            network_server_port: 8790,
         }
     }
 }

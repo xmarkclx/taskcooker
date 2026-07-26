@@ -17,16 +17,12 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { emptySnapshot, seedSnapshot } from '../data/seed';
 import type { AppSnapshot } from '../domain/domain';
 import { AUTOSAVE_DEBOUNCE_MS } from '../features/markdown/MarkdownEditor';
-import { loadRecentRemoteServers } from '../features/remote/remoteServers';
 import { doneTerminalWarningDismissed } from '../features/tasks/doneTerminalWarningStorage';
 import * as ptyBridge from '../features/terminal/ptyBridge';
 import { createTestRouter } from '../router';
 import * as tauriCommands from '../tauri/commands';
 import * as tauriWindows from '../tauri/windows';
-import {
-  doneTerminalWarningEnabledAtom,
-  recentRemoteServersAtom,
-} from './useMainAppUiState';
+import { doneTerminalWarningEnabledAtom } from './useMainAppUiState';
 
 const tauriEventMock = vi.hoisted(() => {
   const handlers = new Map<
@@ -118,147 +114,6 @@ describe('Boomerang app shell', () => {
     ).not.toBeInTheDocument();
   });
 
-  it('connects to a remote TaskCooker server from the native menu event', async () => {
-    const remoteSnapshot: AppSnapshot = {
-      ...seedSnapshot,
-      projects: [
-        {
-          ...seedSnapshot.projects[0],
-          id: 501,
-          name: 'WSL Brain',
-          workingDirectory: '/home/mark/p/boomerangtasks',
-        },
-      ],
-      selectedProjectId: 501,
-      selectedTodoId: 0,
-      todos: [],
-    };
-    const startRemoteTunnel = vi
-      .spyOn(tauriCommands, 'startRemoteTunnel')
-      .mockResolvedValue({
-        baseUrl: 'http://127.0.0.1:49152',
-        localPort: 49152,
-        serverPort: 8790,
-        sshHost: 'wsl',
-      });
-    const stopRemoteTunnel = vi
-      .spyOn(tauriCommands, 'stopRemoteTunnel')
-      .mockResolvedValue();
-    vi.spyOn(tauriCommands, 'loadAppSnapshot')
-      .mockResolvedValueOnce(seedSnapshot)
-      .mockResolvedValue(remoteSnapshot);
-
-    renderApp();
-    await screen.findByRole('button', { name: 'Go home' });
-    await act(async () => {
-      emitTauriEvent('remote:connect-requested');
-    });
-
-    const dialog = await screen.findByRole('dialog', {
-      name: /connect to taskcooker server/i,
-    });
-    fireEvent.change(within(dialog).getByLabelText('SSH host'), {
-      target: { value: 'wsl' },
-    });
-    fireEvent.change(within(dialog).getByLabelText('Server port'), {
-      target: { value: '8790' },
-    });
-    fireEvent.change(within(dialog).getByLabelText('Remote project path'), {
-      target: { value: '/home/mark/p/boomerangtasks' },
-    });
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Connect' }));
-
-    await waitFor(() => {
-      expect(startRemoteTunnel).toHaveBeenCalledWith({
-        sshHost: 'wsl',
-        serverPort: 8790,
-      });
-    });
-    expect(await screen.findByText('Connected to wsl')).toBeInTheDocument();
-    expect(
-      await screen.findByLabelText(/select project: WSL Brain/i),
-    ).toBeInTheDocument();
-    expect(
-      JSON.parse(
-        window.localStorage.getItem('taskcooker.remoteServers') ?? '[]',
-      ),
-    ).toEqual([
-      {
-        sshHost: 'wsl',
-        serverPort: 8790,
-        remotePath: '/home/mark/p/boomerangtasks',
-      },
-    ]);
-
-    fireEvent.click(
-      screen.getByRole('button', { name: 'Disconnect remote server' }),
-    );
-
-    await waitFor(() => {
-      expect(stopRemoteTunnel).toHaveBeenCalledTimes(1);
-    });
-    expect(screen.queryByText('Connected to wsl')).not.toBeInTheDocument();
-  });
-
-  it('quick-connects to recent remote servers and keeps only five deduped entries', async () => {
-    window.localStorage.setItem(
-      'taskcooker.remoteServers',
-      JSON.stringify([
-        { sshHost: 'alpha', serverPort: 8790, remotePath: '/srv/alpha' },
-        {
-          sshHost: 'wsl',
-          serverPort: 8790,
-          remotePath: '/home/mark/p/boomerangtasks',
-        },
-        { sshHost: 'beta', serverPort: 8791, remotePath: '/srv/beta' },
-        { sshHost: 'gamma', serverPort: 8792, remotePath: '/srv/gamma' },
-        { sshHost: 'delta', serverPort: 8793, remotePath: '/srv/delta' },
-      ]),
-    );
-    vi.spyOn(tauriCommands, 'startRemoteTunnel').mockResolvedValue({
-      baseUrl: 'http://127.0.0.1:49152',
-      localPort: 49152,
-      serverPort: 8790,
-      sshHost: 'wsl',
-    });
-    vi.spyOn(tauriCommands, 'loadAppSnapshot').mockResolvedValue(seedSnapshot);
-
-    renderApp();
-    await screen.findByRole('button', { name: 'Go home' });
-    await act(async () => {
-      emitTauriEvent('remote:connect-requested');
-    });
-
-    const dialog = await screen.findByRole('dialog', {
-      name: /connect to taskcooker server/i,
-    });
-    fireEvent.click(
-      within(dialog).getByRole('button', { name: /quick connect wsl/i }),
-    );
-
-    await waitFor(() => {
-      expect(tauriCommands.startRemoteTunnel).toHaveBeenCalledWith({
-        sshHost: 'wsl',
-        serverPort: 8790,
-      });
-    });
-    expect(
-      JSON.parse(
-        window.localStorage.getItem('taskcooker.remoteServers') ?? '[]',
-      ),
-    ).toEqual([
-      {
-        sshHost: 'wsl',
-        serverPort: 8790,
-        remotePath: '/home/mark/p/boomerangtasks',
-      },
-      { sshHost: 'alpha', serverPort: 8790, remotePath: '/srv/alpha' },
-      { sshHost: 'beta', serverPort: 8791, remotePath: '/srv/beta' },
-      { sshHost: 'gamma', serverPort: 8792, remotePath: '/srv/gamma' },
-      { sshHost: 'delta', serverPort: 8793, remotePath: '/srv/delta' },
-    ]);
-  });
-
   it('applies saved Wood Dark settings and exposes theme controls', async () => {
     vi.spyOn(tauriCommands, 'loadAppSettings').mockResolvedValue({
       ...tauriCommands.fallbackAppSettings,
@@ -341,6 +196,9 @@ describe('Boomerang app shell', () => {
         markdownEditorMaxImageHeight:
           tauriCommands.fallbackAppSettings.markdownEditorMaxImageHeight,
         mcpEnabled: tauriCommands.fallbackAppSettings.mcpEnabled,
+        networkServerEnabled:
+          tauriCommands.fallbackAppSettings.networkServerEnabled,
+        networkServerPort: tauriCommands.fallbackAppSettings.networkServerPort,
         projectAccentBorderWidth:
           tauriCommands.fallbackAppSettings.projectAccentBorderWidth,
         slowdownProfilerEnabled:
@@ -4674,7 +4532,6 @@ function renderApp(url = '/') {
   // Atoms that derive their initial value from localStorage capture it at module
   // load. Re-seed them from the per-test localStorage so each test sees its own
   // fixture instead of the value present when the module first imported.
-  store.set(recentRemoteServersAtom, loadRecentRemoteServers());
   store.set(doneTerminalWarningEnabledAtom, !doneTerminalWarningDismissed());
   render(
     <JotaiProvider store={store}>

@@ -194,6 +194,8 @@ pub(super) fn migrate(conn: &Connection) -> AppResult<()> {
             external_terminal_openers TEXT NOT NULL DEFAULT 'open -na Ghostty.app --args --title={title} --working-directory={cwd} --command={tmuxCommand}, open -a Terminal.app {commandFile}',
             folder_open_app TEXT NOT NULL DEFAULT 'code',
             app_context_markdown TEXT NOT NULL DEFAULT '',
+            network_server_enabled INTEGER NOT NULL DEFAULT 0,
+            network_server_port INTEGER NOT NULL DEFAULT 8790,
             created_at TEXT NOT NULL,
             updated_at TEXT NOT NULL
         );
@@ -487,6 +489,18 @@ pub(super) fn migrate(conn: &Connection) -> AppResult<()> {
         "app_settings",
         "app_context_markdown",
         "TEXT NOT NULL DEFAULT ''",
+    )?;
+    ensure_column(
+        conn,
+        "app_settings",
+        "network_server_enabled",
+        "INTEGER NOT NULL DEFAULT 0",
+    )?;
+    ensure_column(
+        conn,
+        "app_settings",
+        "network_server_port",
+        "INTEGER NOT NULL DEFAULT 8790",
     )?;
     let position_added =
         ensure_column_added(conn, "todos", "position", "INTEGER NOT NULL DEFAULT 0")?;

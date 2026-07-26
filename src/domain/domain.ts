@@ -287,6 +287,8 @@ export type AppSettingsSummary = {
   slowdownProfilerEnabled: boolean;
   terminalTmuxEnabled: boolean;
   externalTerminalOpeners: string;
+  networkServerEnabled: boolean;
+  networkServerPort: number;
 };
 
 export type AppSnapshot = {

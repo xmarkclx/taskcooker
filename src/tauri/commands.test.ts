@@ -3,7 +3,6 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import * as commandModule from './commands';
 import {
   appendSlowdownProfileRecords,
-  createRemoteInvokeClient,
   connectProjectGitHubRepository,
   loadAppSettings,
   createProject,
@@ -82,54 +81,6 @@ afterEach(() => {
 });
 
 describe('Tauri command client', () => {
-  it('routes remote data commands through remote_invoke and keeps local commands local', async () => {
-    const calls: Array<{ command: string; args?: Record<string, unknown> }> =
-      [];
-    const localClient = {
-      invoke: async <T>(command: string, args?: Record<string, unknown>) => {
-        calls.push({ command, args });
-        if (command === 'remote_invoke') {
-          return { selectedProjectId: 42 } as T;
-        }
-        return undefined as T;
-      },
-    };
-    const remoteClient = createRemoteInvokeClient(
-      {
-        baseUrl: 'http://127.0.0.1:49152',
-        sshHost: 'wsl',
-        remotePath: '/home/mark/project',
-      },
-      localClient,
-    );
-
-    const snapshot = await loadAppSnapshot(remoteClient);
-    await openProjectFolder({ projectId: 42 }, remoteClient);
-
-    expect(snapshot.selectedProjectId).toBe(42);
-    expect(calls).toEqual([
-      {
-        command: 'remote_invoke',
-        args: {
-          input: {
-            baseUrl: 'http://127.0.0.1:49152',
-            command: 'app_snapshot',
-          },
-        },
-      },
-      {
-        command: 'open_project_folder',
-        args: {
-          input: {
-            projectId: 42,
-            remoteHost: 'wsl',
-            remotePath: '/home/mark/project',
-          },
-        },
-      },
-    ]);
-  });
-
   it('falls back to seeded data when the Tauri invoke bridge is unavailable', async () => {
     const snapshot = await loadAppSnapshot({
       invoke: async () => {
@@ -1463,6 +1414,8 @@ describe('Tauri command client', () => {
         markdownEditorFontSize: 'clamp(14px, 1.2vw, 20px)',
         markdownEditorMaxImageHeight: '42vh',
         mcpEnabled: true,
+        networkServerEnabled: false,
+        networkServerPort: 8790,
         projectAccentBorderWidth: 6,
         slowdownProfilerEnabled: false,
         terminalTmuxEnabled: false,
@@ -1533,6 +1486,8 @@ describe('Tauri command client', () => {
             markdownEditorFontSize: 'clamp(14px, 1.2vw, 20px)',
             markdownEditorMaxImageHeight: '42vh',
             mcpEnabled: true,
+            networkServerEnabled: false,
+            networkServerPort: 8790,
             projectAccentBorderWidth: 6,
             slowdownProfilerEnabled: false,
             terminalTmuxEnabled: false,

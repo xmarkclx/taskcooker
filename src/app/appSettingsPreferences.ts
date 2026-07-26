@@ -61,6 +61,8 @@ export function appSettingsUpdateInput(
     markdownEditorFontSize: appSettings.markdownEditorFontSize,
     markdownEditorMaxImageHeight: appSettings.markdownEditorMaxImageHeight,
     mcpEnabled: appSettings.mcpEnabled,
+    networkServerEnabled: appSettings.networkServerEnabled,
+    networkServerPort: appSettings.networkServerPort,
     projectAccentBorderWidth: appSettings.projectAccentBorderWidth,
     slowdownProfilerEnabled: appSettings.slowdownProfilerEnabled,
     taskTitler: appSettings.taskTitler,

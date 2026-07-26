@@ -1,5 +1,6 @@
 export const queryKeys = {
   appSettings: () => ['appSettings'] as const,
+  networkServerAddresses: () => ['networkServerAddresses'] as const,
   appSnapshot: () => ['appSnapshot'] as const,
   projects: () => ['projects'] as const,
   projectActions: (projectId: number) => ['projectActions', projectId] as const,

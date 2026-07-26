@@ -2580,6 +2580,8 @@ fn app_settings_are_persisted_and_token_can_regenerate() {
         "Atkinson Hyperlegible, fantasy",
         "clamp(14px, 1.2vw, 20px)",
         "42vh",
+        true,
+        8791,
     )
     .unwrap();
     let updated = db.app_settings().unwrap();
@@ -2589,6 +2591,8 @@ fn app_settings_are_persisted_and_token_can_regenerate() {
     assert!(updated.deep_link_fallback);
     assert_eq!(updated.home_project_id, 42);
     assert_eq!(updated.project_accent_border_width, 6);
+    assert!(updated.network_server_enabled);
+    assert_eq!(updated.network_server_port, 8791);
     assert_eq!(
         updated.markdown_editor_font_family,
         "Atkinson Hyperlegible, fantasy"

@@ -6,12 +6,12 @@ pub mod core;
 pub mod db_watcher;
 pub mod mcp;
 pub mod pty;
-pub mod remote;
 pub mod server;
+pub mod wsl_relay;
 
 use std::fs;
 
-use tauri::{Emitter, Manager};
+use tauri::Manager;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -19,19 +19,15 @@ pub fn run() {
         .menu(|app_handle| app_windows::create_app_menu(app_handle))
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
-        .on_menu_event(|app, event| {
-            if event.id() == app_windows::CONNECT_REMOTE_MENU_ID {
-                let _ = app.emit("remote:connect-requested", ());
-            }
-        })
         .setup(|app| {
             let app_data_dir = app.path().app_data_dir()?;
             fs::create_dir_all(&app_data_dir)?;
-            let db = core::AppDb::open_path(app_data_dir.join(core::DATABASE_FILE_NAME))?;
+            let db_path = app_data_dir.join(core::DATABASE_FILE_NAME);
+            let db = core::AppDb::open_path(&db_path)?;
             app.manage(db);
             app.manage(mcp::McpServerState::default());
+            app.manage(server::NetworkServerState::new(db_path));
             app.manage(pty::PtyState::default());
-            app.manage(remote::RemoteTunnelState::default());
             let db = app.state::<core::AppDb>();
             let settings = db.app_settings()?;
             // MCP startup should never abort the desktop app; port conflicts are
@@ -42,6 +38,14 @@ pub fn run() {
                 &settings,
             ) {
                 eprintln!("warning: MCP server did not start: {err}");
+            }
+            // Same policy for the LAN/Tailscale network server (T-34): a bind
+            // failure (port in use, firewall) must not abort the desktop app.
+            if let Err(err) = app
+                .state::<server::NetworkServerState>()
+                .apply_settings(&app.handle().clone(), &settings)
+            {
+                eprintln!("warning: network server did not start: {err}");
             }
             // Watch artifact files so external edits refresh the UI and engage the
             // editor's conflict guard instead of being silently overwritten.
@@ -93,6 +97,7 @@ pub fn run() {
             commands::list_project_actions,
             commands::mark_todo_messages_read,
             commands::message_todo,
+            commands::network_server_addresses,
             commands::open_todo_worktree_diff,
             commands::open_todo_worktree_folder,
             commands::open_external_terminal,
@@ -147,11 +152,8 @@ pub fn run() {
             pty::pty_resize,
             pty::pty_scrollback,
             pty::pty_write,
-            remote::remote_invoke,
-            remote::start_remote_tunnel,
             commands::unlink_project,
             commands::update_project_status,
-            remote::stop_remote_tunnel,
             commands::start_timer,
             commands::stop_timer
         ])

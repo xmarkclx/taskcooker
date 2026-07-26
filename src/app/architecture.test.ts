@@ -39,7 +39,6 @@ describe('app shell architecture', () => {
       './ProjectActionRunOverlay',
       './AppSettingsOverlay',
       './GlobalSearchOverlay',
-      './RemoteConnectOverlay',
     ]) {
       expect(mainAppSource).not.toContain(`from '${modulePath}'`);
     }

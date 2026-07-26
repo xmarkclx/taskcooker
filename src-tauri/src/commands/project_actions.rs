@@ -59,13 +59,7 @@ pub fn open_project_folder(
     if !path.is_dir() {
         return Err(format!("project folder does not exist: {}", path.display()));
     }
-    open_folder_with_app(
-        &app,
-        &project.project_folder_open_app,
-        &path,
-        input.remote_host.as_deref(),
-        input.remote_path.as_deref(),
-    )?;
+    open_folder_with_app(&app, &project.project_folder_open_app, &path)?;
     Ok(ProjectActionsDirectorySummary {
         exists: path.is_dir(),
         path: path.display().to_string(),
@@ -132,7 +126,7 @@ pub fn run_project_action(
         if !path.is_dir() {
             return Err(format!("project folder does not exist: {}", path.display()));
         }
-        open_folder_with_app(&app, &project.project_folder_open_app, &path, None, None)?;
+        open_folder_with_app(&app, &project.project_folder_open_app, &path)?;
     }
 
     let project_id = input.project_id;

@@ -1,6 +1,7 @@
 import { invoke as tauriInvoke, isTauri } from '@tauri-apps/api/core';
 
 import { previewSeedSnapshot } from '../data/seed';
+import { isWebServerMode } from './webServerMode';
 import type {
   ActionRunSummary,
   AppSettingsSummary,
@@ -31,83 +32,8 @@ const defaultClient: InvokeClient = {
   invoke: (command, args) => activeClient.invoke(command, args),
 };
 
-export type RemoteConnection = {
-  baseUrl: string;
-  sshHost: string;
-  remotePath: string;
-};
-
-const localOnlyRemoteCommands = new Set([
-  'open_file_path',
-  'open_project_folder',
-  'open_todo_artifact',
-  'plugin:opener|open_url',
-  'remote_invoke',
-  'start_remote_tunnel',
-  'stop_remote_tunnel',
-]);
-
-export function createRemoteInvokeClient(
-  connection: RemoteConnection,
-  localClient: InvokeClient = tauriClient,
-): InvokeClient {
-  return {
-    invoke: async <T>(command: string, args?: Record<string, unknown>) => {
-      if (localOnlyRemoteCommands.has(command)) {
-        const nextArgs =
-          command === 'open_project_folder'
-            ? {
-                ...args,
-                input: {
-                  ...(args?.input as Record<string, unknown> | undefined),
-                  remoteHost: connection.sshHost,
-                  remotePath: connection.remotePath,
-                },
-              }
-            : args;
-        return localClient.invoke<T>(command, nextArgs);
-      }
-
-      const input: Record<string, unknown> = {
-        baseUrl: connection.baseUrl,
-        command,
-      };
-      if (args !== undefined) {
-        input.args = args;
-      }
-      return localClient.invoke<T>('remote_invoke', { input });
-    },
-  };
-}
-
 export function setActiveInvokeClient(client: InvokeClient | null): void {
   activeClient = client ?? tauriClient;
-}
-
-export type StartRemoteTunnelInput = {
-  sshHost: string;
-  serverPort: number;
-  localPort?: number;
-};
-
-export type RemoteTunnelSummary = {
-  baseUrl: string;
-  localPort: number;
-  serverPort: number;
-  sshHost: string;
-};
-
-export async function startRemoteTunnel(
-  input: StartRemoteTunnelInput,
-  client: InvokeClient = tauriClient,
-): Promise<RemoteTunnelSummary> {
-  return client.invoke<RemoteTunnelSummary>('start_remote_tunnel', { input });
-}
-
-export async function stopRemoteTunnel(
-  client: InvokeClient = tauriClient,
-): Promise<void> {
-  return client.invoke<void>('stop_remote_tunnel');
 }
 
 export const fallbackAppSettings: AppSettingsSummary = {
@@ -139,6 +65,8 @@ export const fallbackAppSettings: AppSettingsSummary = {
   terminalTmuxEnabled: false,
   externalTerminalOpeners:
     'open -na Ghostty.app --args --title={title} --working-directory={cwd} --command={tmuxCommand}, open -a Terminal.app {commandFile}',
+  networkServerEnabled: false,
+  networkServerPort: 8790,
   theme: 'system',
 };
 
@@ -148,7 +76,9 @@ export async function loadAppSnapshot(
   try {
     return await client.invoke<AppSnapshot>('app_snapshot');
   } catch (error) {
-    if (isTauri()) {
+    // Web-server mode shows real data; a transient network error must surface
+    // instead of silently swapping in the preview seed.
+    if (isTauri() || isWebServerMode()) {
       throw error;
     }
 
@@ -162,11 +92,23 @@ export async function loadAppSettings(
   try {
     return await client.invoke<AppSettingsSummary>('app_settings');
   } catch (error) {
-    if (isTauri()) {
+    if (isTauri() || isWebServerMode()) {
       throw error;
     }
 
     return fallbackAppSettings;
+  }
+}
+
+/** IPv4 addresses other devices can use to reach this machine's network
+ * server. Empty outside the desktop app (preview) or on lookup failure. */
+export async function loadNetworkServerAddresses(
+  client: InvokeClient = defaultClient,
+): Promise<string[]> {
+  try {
+    return await client.invoke<string[]>('network_server_addresses');
+  } catch {
+    return [];
   }
 }
 
@@ -187,6 +129,8 @@ export type UpdateAppSettingsInput = {
   slowdownProfilerEnabled: boolean;
   terminalTmuxEnabled: boolean;
   externalTerminalOpeners: string;
+  networkServerEnabled: boolean;
+  networkServerPort: number;
 };
 
 export async function updateAppSettings(
@@ -842,8 +786,6 @@ export async function updateProjectPromptSettings(
 
 export type ListProjectActionsInput = {
   projectId: number;
-  remoteHost?: string;
-  remotePath?: string;
 };
 
 export async function listProjectActions(

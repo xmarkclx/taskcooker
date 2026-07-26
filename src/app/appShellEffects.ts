@@ -1,11 +1,11 @@
 import type { QueryClient } from '@tanstack/react-query';
-import { listen } from '@tauri-apps/api/event';
 import { useEffect } from 'react';
 
 import type { ExecutionTerminalSummary } from '../domain/domain';
 import { prefetchPtyScrollback } from '../features/terminal/ptyBridge';
 import { registerAppEventBridge, type AppNotificationPayload } from '../tauri/events';
 import { isTauriRuntime } from '../tauri/runtime';
+import { createWebAppEventClient, isWebServerMode } from '../tauri/webServerMode';
 import { closeCurrentAppWindow } from '../tauri/windows';
 
 /**
@@ -21,7 +21,14 @@ export function useAppEventBridge(
     let cleanup: (() => void) | null = null;
     let cancelled = false;
 
-    void registerAppEventBridge(queryClient, undefined, showToast, onTitleGeneration)
+    // In web-server mode Tauri events do not exist; the bridge listens over
+    // the server's /stream connection instead.
+    void registerAppEventBridge(
+      queryClient,
+      isWebServerMode() ? createWebAppEventClient() : undefined,
+      showToast,
+      onTitleGeneration,
+    )
       .then((nextCleanup) => {
         if (cancelled) {
           nextCleanup();
@@ -54,30 +61,6 @@ export function useScrollbackPrefetch(executionTerminals: ExecutionTerminalSumma
       void prefetchPtyScrollback(terminal.ptyId);
     }
   }, [executionTerminals]);
-}
-
-/** Opens the remote-connect dialog when the backend emits the request event. */
-export function useRemoteConnectRequestListener(onRequested: () => void) {
-  useEffect(() => {
-    let cleanup: (() => void) | null = null;
-    let cancelled = false;
-
-    void listen('remote:connect-requested', () => {
-      onRequested();
-    }).then((nextCleanup) => {
-      if (cancelled) {
-        nextCleanup();
-        return;
-      }
-      cleanup = nextCleanup;
-    });
-
-    return () => {
-      cancelled = true;
-      cleanup?.();
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 }
 
 /** Cmd/Ctrl+, opens App Settings. */

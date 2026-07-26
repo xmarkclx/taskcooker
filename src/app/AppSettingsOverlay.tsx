@@ -1,5 +1,7 @@
-import { type QueryClient } from '@tanstack/react-query';
+import { useQuery, type QueryClient } from '@tanstack/react-query';
 import { useAtom } from 'jotai';
+
+import { loadNetworkServerAddresses } from '../tauri/commands';
 
 import type { AppSettingsSummary, ProjectSummary } from '../domain/domain';
 import { AppSettingsDialog, type AppSettingsSubmit } from '../features/settings/AppSettingsDialog';
@@ -29,6 +31,11 @@ export function AppSettingsOverlay({
   const [doneTerminalWarningEnabled, setDoneTerminalWarningEnabled] = useAtom(
     doneTerminalWarningEnabledAtom,
   );
+  const networkServerAddresses = useQuery({
+    enabled: appSettingsOpen,
+    queryFn: () => loadNetworkServerAddresses(),
+    queryKey: queryKeys.networkServerAddresses(),
+  });
 
   if (!appSettingsOpen) {
     return null;
@@ -71,6 +78,7 @@ export function AppSettingsOverlay({
             }),
         });
       }}
+      networkServerAddresses={networkServerAddresses.data ?? []}
       projects={projects}
       settings={appSettings}
     />

@@ -484,6 +484,8 @@ pub struct AppSettingsSummary {
     pub slowdown_profiler_enabled: bool,
     pub terminal_tmux_enabled: bool,
     pub external_terminal_openers: String,
+    pub network_server_enabled: bool,
+    pub network_server_port: i64,
 }
 
 impl Actor {

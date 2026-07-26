@@ -1,7 +1,7 @@
 use boomerang_tasks_lib::commands::{
     agent_prompt_for_execution, app_snapshot_from_db, append_slowdown_profile_jsonl_with_rotation,
     build_agent_process_command, build_execution_process_command,
-    build_folder_open_process_command, build_worktree_diff_process_command,
+    build_worktree_diff_process_command,
     build_worktree_merge_process_command, claude_status_close_input,
     claude_status_session_id_from_output, clear_todo_messages_in_db,
     codex_status_session_id_from_output, create_project_action_in_db,
@@ -1142,8 +1142,6 @@ fn project_actions_directory_command_helpers_resolve_and_create_directory() {
         &db,
         ProjectActionsDirectoryCommand {
             project_id: project.id,
-            remote_host: None,
-            remote_path: None,
         },
     )
     .unwrap();
@@ -1154,8 +1152,6 @@ fn project_actions_directory_command_helpers_resolve_and_create_directory() {
         &db,
         ProjectActionsDirectoryCommand {
             project_id: project.id,
-            remote_host: None,
-            remote_path: None,
         },
     )
     .unwrap();
@@ -1307,6 +1303,8 @@ fn execution_process_commands_force_no_approval_provider_flags() {
         terminal_tmux_enabled: false,
         external_terminal_openers: "open -na Ghostty.app --args --command={tmuxCommand}"
             .to_string(),
+        network_server_enabled: false,
+        network_server_port: 8790,
     };
 
     let codex = build_execution_process_command(
@@ -1364,6 +1362,8 @@ fn execution_process_commands_support_provider_start_and_resume() {
         terminal_tmux_enabled: false,
         external_terminal_openers: "open -na Ghostty.app --args --command={tmuxCommand}"
             .to_string(),
+        network_server_enabled: false,
+        network_server_port: 8790,
     };
 
     let omp_start = build_execution_process_command(
@@ -1525,34 +1525,14 @@ fn execution_process_command_rejects_unknown_kind() {
         terminal_tmux_enabled: false,
         external_terminal_openers: "open -na Ghostty.app --args --command={tmuxCommand}"
             .to_string(),
+        network_server_enabled: false,
+        network_server_port: 8790,
     };
 
     let error =
         build_execution_process_command(&settings, "editor", "/tmp/tmatrix", Some("Work"), None)
             .unwrap_err();
     assert_eq!(error, "unknown execution terminal kind: editor");
-}
-
-#[test]
-fn folder_open_process_command_builds_vscode_remote_argv() {
-    let process = build_folder_open_process_command(
-        "code",
-        "/Users/markcl/p/local",
-        Some("devbox"),
-        Some("/home/markcl/p/remote path"),
-    )
-    .unwrap();
-
-    assert_eq!(process.program, "code");
-    assert_eq!(
-        process.args,
-        vec![
-            "--remote",
-            "ssh-remote+devbox",
-            "/home/markcl/p/remote path",
-        ],
-    );
-    assert_eq!(process.cwd, "/Users/markcl/p/local");
 }
 
 #[test]
@@ -1587,6 +1567,8 @@ fn agent_process_commands_are_built_as_argv_not_shell_strings() {
         terminal_tmux_enabled: false,
         external_terminal_openers: "open -na Ghostty.app --args --command={tmuxCommand}"
             .to_string(),
+        network_server_enabled: false,
+        network_server_port: 8790,
     };
 
     let claude = build_agent_process_command(
@@ -1652,6 +1634,8 @@ fn agent_process_prompts_include_boomerang_conversation_context() {
         terminal_tmux_enabled: false,
         external_terminal_openers: "open -na Ghostty.app --args --command={tmuxCommand}"
             .to_string(),
+        network_server_enabled: false,
+        network_server_port: 8790,
     };
 
     let codex = build_agent_process_command(
@@ -1745,6 +1729,8 @@ fn app_settings_command_helpers_update_and_regenerate_token() {
             markdown_editor_font_family: "Atkinson Hyperlegible, fantasy".to_string(),
             markdown_editor_font_size: "clamp(14px, 1.2vw, 20px)".to_string(),
             markdown_editor_max_image_height: "42vh".to_string(),
+            network_server_enabled: true,
+            network_server_port: 8791,
         },
     )
     .unwrap();
@@ -1756,6 +1742,8 @@ fn app_settings_command_helpers_update_and_regenerate_token() {
     assert!(!updated.task_details_rail_hidden);
     assert!(!updated.slowdown_profiler_enabled);
     assert!(!updated.terminal_tmux_enabled);
+    assert!(updated.network_server_enabled);
+    assert_eq!(updated.network_server_port, 8791);
     assert_eq!(updated.folder_open_app, "code");
     assert_eq!(updated.app_context_markdown, "# App context");
     assert_eq!(
@@ -1890,5 +1878,16 @@ fn slowdown_profile_writer_rotates_current_log_and_replaces_previous_when_full()
     assert!(previous_text.contains("\"seq\":2"));
     for line in text.lines().chain(previous_text.lines()) {
         serde_json::from_str::<serde_json::Value>(line).expect("line remains valid JSON");
+    }
+}
+
+#[test]
+fn network_server_addresses_are_ipv4_strings() {
+    // Exercises the interface enumeration on the host; every returned entry
+    // must be a plain IPv4 address the settings dialog can compose into URLs.
+    for address in boomerang_tasks_lib::commands::network_server_addresses_list() {
+        address
+            .parse::<std::net::Ipv4Addr>()
+            .expect("network address is valid IPv4");
     }
 }

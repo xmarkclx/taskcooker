@@ -1845,6 +1845,8 @@ impl AppDb {
         markdown_editor_font_family: &str,
         markdown_editor_font_size: &str,
         markdown_editor_max_image_height: &str,
+        network_server_enabled: bool,
+        network_server_port: i64,
     ) -> AppResult<AppSettingsSummary> {
         let theme = theme_label(theme)?;
         let claude_path = required_text("Claude path", claude_path)?;
@@ -1857,6 +1859,11 @@ impl AppDb {
             MIN_PROJECT_ACCENT_BORDER_WIDTH,
             MAX_PROJECT_ACCENT_BORDER_WIDTH,
         );
+        if !(1..=65_535).contains(&network_server_port) {
+            return Err(AppError::InvalidInput(format!(
+                "network server port must be between 1 and 65535: {network_server_port}"
+            )));
+        }
         let conn = self.conn.lock().expect("database lock is not poisoned");
         ensure_app_settings_locked(&conn)?;
         let now = now_string();
@@ -1878,7 +1885,9 @@ impl AppDb {
                     markdown_editor_font_family = ?14,
                     markdown_editor_font_size = ?15,
                     markdown_editor_max_image_height = ?16,
-                    updated_at = ?17
+                    network_server_enabled = ?17,
+                    network_server_port = ?18,
+                    updated_at = ?19
               WHERE id = 1",
             params![
                 mcp_enabled,
@@ -1897,6 +1906,8 @@ impl AppDb {
                 markdown_editor_font_family.trim(),
                 markdown_editor_font_size.trim(),
                 markdown_editor_max_image_height.trim(),
+                network_server_enabled,
+                network_server_port,
                 now
             ],
         )?;

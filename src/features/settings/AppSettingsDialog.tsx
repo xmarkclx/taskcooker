@@ -29,13 +29,19 @@ export type AppSettingsSubmit = {
   slowdownProfilerEnabled: boolean;
   terminalTmuxEnabled: boolean;
   externalTerminalOpeners: string;
+  networkServerEnabled: boolean;
+  networkServerPort: number;
 };
 
 const MIN_PROJECT_BORDER_WIDTH = 1;
 const MAX_PROJECT_BORDER_WIDTH = 12;
+const MIN_NETWORK_SERVER_PORT = 1;
+const MAX_NETWORK_SERVER_PORT = 65535;
+const DEFAULT_NETWORK_SERVER_PORT = 8790;
 
 type AppSettingsDialogProps = {
   doneTerminalWarningEnabled?: boolean;
+  networkServerAddresses?: string[];
   onClose: () => void;
   onCopyToken: () => void;
   onDoneTerminalWarningEnabledChange?: (enabled: boolean) => void;
@@ -47,6 +53,7 @@ type AppSettingsDialogProps = {
 
 export function AppSettingsDialog({
   doneTerminalWarningEnabled = true,
+  networkServerAddresses = [],
   onClose,
   onCopyToken,
   onDoneTerminalWarningEnabledChange,
@@ -69,6 +76,8 @@ export function AppSettingsDialog({
       markdownEditorFontSize: settings.markdownEditorFontSize,
       markdownEditorMaxImageHeight: settings.markdownEditorMaxImageHeight,
       mcpEnabled: settings.mcpEnabled,
+      networkServerEnabled: settings.networkServerEnabled,
+      networkServerPort: settings.networkServerPort,
       projectAccentBorderWidth: settings.projectAccentBorderWidth,
       slowdownProfilerEnabled: settings.slowdownProfilerEnabled,
       terminalTmuxEnabled: settings.terminalTmuxEnabled,
@@ -88,6 +97,8 @@ export function AppSettingsDialog({
         markdownEditorFontSize: value.markdownEditorFontSize.trim(),
         markdownEditorMaxImageHeight: value.markdownEditorMaxImageHeight.trim(),
         mcpEnabled: value.mcpEnabled,
+        networkServerEnabled: value.networkServerEnabled,
+        networkServerPort: clampNetworkServerPort(value.networkServerPort),
         projectAccentBorderWidth: clampProjectBorderWidth(value.projectAccentBorderWidth),
         slowdownProfilerEnabled: value.slowdownProfilerEnabled,
         terminalTmuxEnabled: value.terminalTmuxEnabled,
@@ -158,6 +169,61 @@ export function AppSettingsDialog({
               Regenerate
             </AppButton>
           </div>
+
+          <form.Field name="networkServerEnabled">
+            {(field) => (
+              <label className="form-check">
+                <input
+                  aria-label="Serve on network (LAN/Tailscale)"
+                  checked={field.state.value}
+                  onBlur={field.handleBlur}
+                  onChange={(event) => field.handleChange(event.target.checked)}
+                  type="checkbox"
+                />
+                <span>Serve on network (LAN/Tailscale)</span>
+              </label>
+            )}
+          </form.Field>
+
+          <form.Field name="networkServerPort">
+            {(field) => (
+              <label className="form-field">
+                <span>Network server port</span>
+                <input
+                  aria-label="Network server port"
+                  max={MAX_NETWORK_SERVER_PORT}
+                  min={MIN_NETWORK_SERVER_PORT}
+                  onBlur={field.handleBlur}
+                  onChange={(event) => field.handleChange(Number(event.target.value))}
+                  type="number"
+                  value={field.state.value}
+                />
+                <span className="form-field-hint">
+                  Serves the TaskCooker web app and API on all interfaces. Open one of the
+                  URLs below on another device and paste the token above. Only enable on
+                  networks you trust.
+                </span>
+              </label>
+            )}
+          </form.Field>
+
+          <form.Subscribe
+            selector={(state) => ({
+              enabled: state.values.networkServerEnabled,
+              port: state.values.networkServerPort,
+            })}
+          >
+            {({ enabled, port }) =>
+              enabled && networkServerAddresses.length ? (
+                <div aria-label="Network server URLs" className="form-field">
+                  <span>Open from another device</span>
+                  {networkServerAddresses.map((address) => (
+                    <code key={address}>{`http://${address}:${port}`}</code>
+                  ))}
+                </div>
+              ) : null
+            }
+          </form.Subscribe>
 
           <form.Field name="theme">
             {(field) => (
@@ -448,4 +514,12 @@ function clampProjectBorderWidth(width: number): number {
   }
 
   return Math.min(MAX_PROJECT_BORDER_WIDTH, Math.max(MIN_PROJECT_BORDER_WIDTH, Math.round(width)));
+}
+
+function clampNetworkServerPort(port: number): number {
+  if (!Number.isFinite(port)) {
+    return DEFAULT_NETWORK_SERVER_PORT;
+  }
+
+  return Math.min(MAX_NETWORK_SERVER_PORT, Math.max(MIN_NETWORK_SERVER_PORT, Math.round(port)));
 }

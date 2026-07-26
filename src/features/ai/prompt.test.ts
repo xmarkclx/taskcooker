@@ -273,6 +273,8 @@ const appSettings: AppSettingsSummary = {
   mcpEnabled: true,
   mcpPort: 56810,
   mcpToken: 'test-token',
+  networkServerEnabled: false,
+  networkServerPort: 8790,
   projectAccentBorderWidth: 4,
   slowdownProfilerEnabled: true,
   terminalTmuxEnabled: false,

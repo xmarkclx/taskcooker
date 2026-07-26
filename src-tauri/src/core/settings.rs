@@ -91,7 +91,7 @@ pub(super) fn app_settings_locked(conn: &Connection) -> AppResult<AppSettingsSum
                 markdown_description_toc_width, markdown_artifact_toc_width,
                 project_accent_border_width, slowdown_profiler_enabled,
                 terminal_tmux_enabled, external_terminal_openers, folder_open_app,
-                app_context_markdown
+                app_context_markdown, network_server_enabled, network_server_port
          FROM app_settings
          WHERE id = 1",
         [],
@@ -125,6 +125,8 @@ pub(super) fn app_settings_locked(conn: &Connection) -> AppResult<AppSettingsSum
                 external_terminal_openers: row.get(25)?,
                 folder_open_app: row.get(26)?,
                 app_context_markdown: row.get(27)?,
+                network_server_enabled: row.get(28)?,
+                network_server_port: row.get(29)?,
             })
         },
     )

@@ -58,7 +58,7 @@ pub fn open_todo_worktree_folder(
     let project = state
         .get_project(target.project_id)
         .map_err(command_error)?;
-    open_folder_with_app(&app, &project.project_folder_open_app, &path, None, None)?;
+    open_folder_with_app(&app, &project.project_folder_open_app, &path)?;
     Ok(ProjectActionsDirectorySummary {
         exists: path.is_dir(),
         path: path.display().to_string(),

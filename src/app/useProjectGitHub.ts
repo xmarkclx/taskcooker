@@ -20,9 +20,11 @@ import { queryKeys } from '../tauri/queryKeys';
  * ProjectSettingsDialog expects so the shell can spread them straight in.
  */
 export function useProjectGitHub({
+  enabled,
   previewFallbacksEnabled,
   project,
 }: {
+  enabled: boolean;
   previewFallbacksEnabled: boolean;
   project: ProjectSummary | undefined;
 }) {
@@ -44,6 +46,8 @@ export function useProjectGitHub({
     onSuccess: applyRepositorySummary,
   });
   const { data: ownerOptions = [] } = useQuery({
+    enabled,
+    refetchInterval: false,
     queryKey: queryKeys.projectGitHubOwners(),
     queryFn: async () => {
       try {
@@ -58,7 +62,8 @@ export function useProjectGitHub({
     },
   });
   const { data: gitRepository = null } = useQuery({
-    enabled: Boolean(project),
+    enabled: enabled && Boolean(project),
+    refetchInterval: false,
     queryKey: queryKeys.projectGitRepository(project?.id ?? 0),
     queryFn: async () => {
       if (!project) {

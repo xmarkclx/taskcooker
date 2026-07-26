@@ -36,9 +36,9 @@ impl WorktreeCommandPlatform {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum FolderOpenCommandSpec {
-    System { path: String, app: Option<String> },
-    Process(ProcessCommandSpec),
+pub struct FolderOpenCommandSpec {
+    pub path: String,
+    pub app: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -411,8 +411,6 @@ pub struct ListProjectActionsCommand {
 #[serde(rename_all = "camelCase")]
 pub struct ProjectActionsDirectoryCommand {
     pub project_id: i64,
-    pub remote_host: Option<String>,
-    pub remote_path: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -553,10 +551,18 @@ pub struct UpdateAppSettingsCommand {
     pub markdown_editor_font_size: String,
     #[serde(default = "default_markdown_editor_max_image_height")]
     pub markdown_editor_max_image_height: String,
+    #[serde(default)]
+    pub network_server_enabled: bool,
+    #[serde(default = "default_network_server_port")]
+    pub network_server_port: i64,
 }
 
 fn default_folder_open_app() -> String {
     "code".to_string()
+}
+
+fn default_network_server_port() -> i64 {
+    8790
 }
 
 fn default_markdown_editor_font_family() -> String {

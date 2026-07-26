@@ -64,10 +64,6 @@ export const NewTaskOverlayIsland = lazy(() =>
   import('./NewTaskOverlay').then((module) => ({ default: module.NewTaskOverlay })),
 );
 
-export const RemoteConnectOverlayIsland = lazy(() =>
-  import('./RemoteConnectOverlay').then((module) => ({ default: module.RemoteConnectOverlay })),
-);
-
 export const ProjectSettingsOverlayIsland = lazy(() =>
   import('./ProjectSettingsOverlay').then((module) => ({ default: module.ProjectSettingsOverlay })),
 );

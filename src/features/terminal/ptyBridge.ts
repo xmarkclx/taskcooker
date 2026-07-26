@@ -1,8 +1,42 @@
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 
+import { isWebServerMode, webCommandInvoke, webListen } from '../../tauri/webServerMode';
+
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
+
+// In web-server mode (browser via LAN/Tailscale) PTY commands travel over the
+// server's /command endpoint and PTY events over its /stream connection; in
+// the Tauri webview they use native IPC.
+function bridgeInvoke<T>(command: string, args?: Record<string, unknown>): Promise<T> {
+  return isWebServerMode() ? webCommandInvoke<T>(command, args) : invoke<T>(command, args);
+}
+
+function bridgeListen<T>(
+  eventName: string,
+  handler: (event: { payload: T }) => void,
+): Promise<() => void> {
+  return isWebServerMode() ? webListen<T>(eventName, handler) : listen<T>(eventName, handler);
+}
+
+function writePtyInput(ptyId: number, inputOwner: string, data: string): Promise<void> {
+  if (isWebServerMode()) {
+    // The Tauri command takes raw bytes + headers; over HTTP the payload is
+    // base64 JSON handled by the server's interactive dispatch.
+    return webCommandInvoke('pty_write', {
+      id: ptyId,
+      owner: inputOwner,
+      data: bytesToBase64(encoder.encode(data)),
+    });
+  }
+  return invoke('pty_write', encoder.encode(data), {
+    headers: {
+      'x-pty-id': String(ptyId),
+      'x-pty-input-owner': inputOwner,
+    },
+  });
+}
 
 type PtyDataPayload = {
   ptyId: number;
@@ -86,7 +120,7 @@ export function prefetchPtyScrollback(ptyId: number): Promise<void> {
     return inflight;
   }
 
-  const request = invoke<PtyScrollback>('pty_scrollback', { id: ptyId })
+  const request = bridgeInvoke<PtyScrollback>('pty_scrollback', { id: ptyId })
     .then((scrollback) => {
       if (scrollback.data && !scrollbackCache.has(ptyId)) {
         scrollbackCache.set(ptyId, capScrollbackBytes(base64ToBytes(scrollback.data)));
@@ -149,7 +183,7 @@ export async function attachPty(
     // so a lone registration failure still assigns the successful listener
     // for the catch block below to clean up.
     const [dataRegistration, exitRegistration] = await Promise.allSettled([
-      listen<PtyDataPayload>(ptyDataEventName(ptyId), (event) => {
+      bridgeListen<PtyDataPayload>(ptyDataEventName(ptyId), (event) => {
         const bytes = base64ToBytes(event.payload.data);
         appendCachedPtyScrollback(ptyId, bytes);
         if (replayingScrollback) {
@@ -159,7 +193,7 @@ export async function attachPty(
 
         handlers.onData(bytes);
       }),
-      listen<PtyExitPayload>(ptyExitEventName(ptyId), (event) => {
+      bridgeListen<PtyExitPayload>(ptyExitEventName(ptyId), (event) => {
         if (replayingScrollback) {
           queuedExitCode = event.payload.exitCode;
           return;
@@ -181,7 +215,7 @@ export async function attachPty(
       throw exitRegistration.reason;
     }
 
-    const scrollback = await invoke<PtyScrollback>('pty_scrollback', { id: ptyId });
+    const scrollback = await bridgeInvoke<PtyScrollback>('pty_scrollback', { id: ptyId });
     const fresh = scrollback.data ? base64ToBytes(scrollback.data) : new Uint8Array(0);
     scrollbackCache.set(ptyId, capScrollbackBytes(fresh));
     if (cached?.byteLength) {
@@ -217,8 +251,8 @@ export async function attachPty(
     }
 
     return {
-      claimInput: () => invoke('pty_claim_input', { id: ptyId, owner: inputOwner }),
-      close: () => invoke('pty_close', { id: ptyId }),
+      claimInput: () => bridgeInvoke('pty_claim_input', { id: ptyId, owner: inputOwner }),
+      close: () => bridgeInvoke('pty_close', { id: ptyId }),
       dispose: () => {
         if (disposed) {
           return;
@@ -228,15 +262,9 @@ export async function attachPty(
         unlistenData?.();
         unlistenExit?.();
       },
-      releaseInput: () => invoke('pty_release_input', { id: ptyId, owner: inputOwner }),
-      resize: (cols, rows) => invoke('pty_resize', { id: ptyId, cols, rows }),
-      write: (data) =>
-        invoke('pty_write', encoder.encode(data), {
-          headers: {
-            'x-pty-id': String(ptyId),
-            'x-pty-input-owner': inputOwner,
-          },
-        }),
+      releaseInput: () => bridgeInvoke('pty_release_input', { id: ptyId, owner: inputOwner }),
+      resize: (cols, rows) => bridgeInvoke('pty_resize', { id: ptyId, cols, rows }),
+      write: (data) => writePtyInput(ptyId, inputOwner, data),
     };
   } catch (error) {
     unlistenData?.();
@@ -246,12 +274,12 @@ export async function attachPty(
 }
 
 export async function loadPtyScrollbackText(ptyId: number): Promise<string> {
-  const scrollback = await invoke<PtyScrollback>('pty_scrollback', { id: ptyId });
+  const scrollback = await bridgeInvoke<PtyScrollback>('pty_scrollback', { id: ptyId });
   return decoder.decode(base64ToBytes(scrollback.data));
 }
 
 export async function closePty(ptyId: number): Promise<void> {
-  await invoke('pty_close', { id: ptyId });
+  await bridgeInvoke('pty_close', { id: ptyId });
 }
 
 type Uint8ArrayWithFromBase64 = typeof Uint8Array & {
@@ -273,6 +301,17 @@ function base64ToBytes(value: string): Uint8Array {
   }
 
   return bytes;
+}
+
+// Keystroke payloads are tiny, but paste events can be large; chunk to stay
+// under argument-count limits for String.fromCharCode.
+function bytesToBase64(bytes: Uint8Array): string {
+  let binary = '';
+  const chunkSize = 0x8000;
+  for (let index = 0; index < bytes.length; index += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(index, index + chunkSize));
+  }
+  return btoa(binary);
 }
 
 function concatBytes(chunks: Uint8Array[]): Uint8Array {

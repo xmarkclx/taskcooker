@@ -38,10 +38,6 @@ import {
 } from '../domain/snapshotActions';
 import { buildTaskPrompt } from '../features/ai/prompt';
 import {
-  saveRecentRemoteServer,
-  type RemoteServerInput,
-} from '../features/remote/remoteServers';
-import {
   dismissDoneTerminalWarning,
 } from '../features/tasks/doneTerminalWarningStorage';
 import { useSlowdownProfiler, useSlowdownRenderProbe } from '../features/performance/slowdownProfiler';
@@ -69,7 +65,6 @@ import {
   sortTasks,
 } from '../features/workspace/workspaceHelpers';
 import {
-  createRemoteInvokeClient,
   fallbackAppSettings,
   getProjectActionsDirectory,
   listProjectActions,
@@ -78,14 +73,12 @@ import {
   openExternalTerminal,
   recordProjectUse,
   renameExecutionTerminal,
-  setActiveInvokeClient,
   startExecutionTerminal,
   suggestTodoWorktreeName,
-  startRemoteTunnel,
-  stopRemoteTunnel,
 } from '../tauri/commands';
 import { queryKeys } from '../tauri/queryKeys';
 import { appWindowChrome, currentTauriWindowLabel, isTauriRuntime } from '../tauri/runtime';
+import { isWebServerMode } from '../tauri/webServerMode';
 import {
   actionRunExecutionTerminal,
   confirmUnfinishedDependencyWarning,
@@ -103,7 +96,6 @@ import {
 } from './appShellHelpers';
 import {
   useAppEventBridge,
-  useRemoteConnectRequestListener,
   useScrollbackPrefetch,
   useSettingsShortcut,
 } from './appShellEffects';
@@ -116,7 +108,6 @@ import {
 } from './appShellDrafts';
 import { appSettingsUpdateInput, updateAppSettingsPreference } from './appSettingsPreferences';
 import { AppToasts } from './AppToasts';
-import { RemoteConnectionBar } from './RemoteConnectionBar';
 import { IslandSpinner } from '../ui/DeferredMount';
 import {
   focusOpenAppWindow,
@@ -147,7 +138,6 @@ import {
   ProjectActionsOverlayIsland,
   ProjectNotesOverlayIsland,
   ProjectSettingsOverlayIsland,
-  RemoteConnectOverlayIsland,
   TaskDetailIsland,
 } from './lazySurfaces';
 import { useMainAppUiState } from './useMainAppUiState';
@@ -188,7 +178,6 @@ export function MainApp() {
     lastStoppedTimer,
     newProjectOpen,
     projectActionsOpen,
-    remoteDialogOpen,
     openOnlyTopLevelPopup,
     localSnapshot,
     setDoneTerminalWarningEnabled,
@@ -196,9 +185,6 @@ export function MainApp() {
     pendingDoneTerminalWarning,
     projectNotesOpen,
     projectSettingsOpen,
-    recentRemoteServers,
-    remoteConnectError,
-    remoteConnectPending,
     setAppSettingsOpen,
     setDeleteActionDialog,
     setDeleteTasksDialog,
@@ -214,11 +200,6 @@ export function MainApp() {
     setProjectActionsOpen,
     setProjectNotesOpen,
     setProjectSettingsOpen,
-    setRecentRemoteServers,
-    setRemoteConnectError,
-    setRemoteConnectPending,
-    setRemoteConnection,
-    setRemoteDialogOpen,
     setHideDelegatedTasks,
     setTaskFilter,
     setTaskSearch,
@@ -294,7 +275,9 @@ export function MainApp() {
     windowLabel: currentTauriWindowLabel(),
   });
   useSlowdownRenderProbe('app', profilerRoute);
-  const previewFallbacksEnabled = !tauriRuntime;
+  // Web-server mode operates on real data over HTTP, so the local preview
+  // fallbacks (seed snapshot, optimistic-only mutations) must stay off.
+  const previewFallbacksEnabled = !tauriRuntime && !isWebServerMode();
   const windowChrome = appWindowChrome();
   const runPreviewFallback = (callback: () => void) => { if (previewFallbacksEnabled) callback(); };
   const openMarkdownImage = (src: string) => void openImageWindow(src);
@@ -339,69 +322,6 @@ export function MainApp() {
       },
     });
   };
-  const connectRemoteServer = async (input: RemoteServerInput) => {
-    const sshHost = input.sshHost.trim();
-    const remotePath = input.remotePath.trim();
-    if (!sshHost || !remotePath || !Number.isInteger(input.serverPort) || input.serverPort <= 0) {
-      setRemoteConnectError('SSH host, server port, and remote project path are required.');
-      return;
-    }
-
-    const server = { sshHost, serverPort: input.serverPort, remotePath };
-    setRemoteConnectPending(true);
-    setRemoteConnectError(null);
-    try {
-      const tunnel = await startRemoteTunnel({
-        sshHost: server.sshHost,
-        serverPort: server.serverPort,
-      });
-      const connection = {
-        ...server,
-        baseUrl: tunnel.baseUrl,
-      };
-      setActiveInvokeClient(
-        createRemoteInvokeClient({
-          baseUrl: connection.baseUrl,
-          remotePath: connection.remotePath,
-          sshHost: connection.sshHost,
-        }),
-      );
-      setRemoteConnection(connection);
-      setRecentRemoteServers(saveRecentRemoteServer(server));
-      setRemoteDialogOpen(false);
-
-      const [snapshot, settings] = await Promise.all([loadAppSnapshot(), loadAppSettings()]);
-      queryClient.setQueryData(queryKeys.appSnapshot(), snapshot);
-      queryClient.setQueryData(queryKeys.appSettings(), settings);
-      setLocalSnapshot(snapshot);
-      void queryClient.invalidateQueries({ queryKey: ['projectActions'] });
-      void queryClient.invalidateQueries({ queryKey: ['projectActionsDirectory'] });
-    } catch (error) {
-      setActiveInvokeClient(null);
-      setRemoteConnection(null);
-      await stopRemoteTunnel().catch(() => undefined);
-      setRemoteConnectError(error instanceof Error ? error.message : String(error));
-    } finally {
-      setRemoteConnectPending(false);
-    }
-  };
-  const disconnectRemoteServer = async () => {
-    setRemoteConnectError(null);
-    await stopRemoteTunnel().catch((error) => {
-      setRemoteConnectError(error instanceof Error ? error.message : String(error));
-    });
-    setActiveInvokeClient(null);
-    setRemoteConnection(null);
-    setLocalSnapshot(null);
-    void queryClient.invalidateQueries({ queryKey: queryKeys.appSnapshot() });
-    void queryClient.invalidateQueries({ queryKey: queryKeys.appSettings() });
-    void queryClient.invalidateQueries({ queryKey: ['projectActions'] });
-    void queryClient.invalidateQueries({ queryKey: ['projectActionsDirectory'] });
-  };
-  useRemoteConnectRequestListener(() => {
-    setRemoteConnectError(null);
-    openOnlyTopLevelPopup(setRemoteDialogOpen);
-  });
   useSettingsShortcut(() => openOnlyTopLevelPopup(setAppSettingsOpen));
   useGlobalSearchShortcut(() => openOnlyTopLevelPopup(setGlobalSearchOpen));
   useFindShortcut(() => setFindOpen(true));
@@ -518,7 +438,11 @@ export function MainApp() {
       }
     },
   });
-  const projectGitHubProps = useProjectGitHub({ previewFallbacksEnabled, project });
+  const projectGitHubProps = useProjectGitHub({
+    enabled: projectSettingsOpen,
+    previewFallbacksEnabled,
+    project,
+  });
   const selectTodoAfterMutation = (snapshot: AppSnapshot, todoId?: number) => {
     if (!todoId || !snapshot.todos.some((todo) => todo.id === todoId)) {
       return;
@@ -1880,7 +1804,6 @@ export function MainApp() {
         themePreference={appSettings.theme}
         onThemeToggle={toggleThemePreference}
       />
-      <RemoteConnectionBar onDisconnect={() => void disconnectRemoteServer()} />
       <AppToasts />
       {globalSearchOpen ? (
         <Suspense fallback={null}>
@@ -2081,14 +2004,6 @@ export function MainApp() {
             projects={data.projects}
             queryClient={queryClient}
             runPreviewFallback={runPreviewFallback}
-          />
-        ) : null}
-        {remoteDialogOpen ? (
-          <RemoteConnectOverlayIsland
-            error={remoteConnectError}
-            onConnect={(input) => void connectRemoteServer(input)}
-            pending={remoteConnectPending}
-            recentServers={recentRemoteServers}
           />
         ) : null}
         {pendingDoneTerminalWarning ? (

@@ -21,6 +21,7 @@ use crate::core::{
     UpdateTodosState, WorktreeNameSuggestion,
 };
 use crate::mcp::McpServerState;
+use crate::server::NetworkServerState;
 use crate::pty::{PtySpawnSpec, PtyState};
 
 const SLOWDOWN_PROFILE_LOG_MAX_BYTES: u64 = 100 * 1024 * 1024;
@@ -93,10 +94,12 @@ pub fn update_app_settings(
     app: AppHandle,
     state: State<'_, AppDb>,
     mcp: State<'_, McpServerState>,
+    network: State<'_, NetworkServerState>,
     input: UpdateAppSettingsCommand,
 ) -> Result<AppSettingsSummary, String> {
     let settings = update_app_settings_in_db(&state, input)?;
     let settings = mcp.apply_settings(app.clone(), &*state, &settings)?;
+    network.apply_settings(&app, &settings)?;
     emit_settings_changed(&app, "settings_changed")?;
     Ok(settings)
 }
@@ -223,8 +226,12 @@ fn trim_jsonl_bytes_to_cap(bytes: &[u8], max_bytes: usize) -> Vec<u8> {
 pub fn regenerate_mcp_token(
     app: AppHandle,
     state: State<'_, AppDb>,
+    network: State<'_, NetworkServerState>,
 ) -> Result<AppSettingsSummary, String> {
     let settings = regenerate_mcp_token_in_db(&state)?;
+    // The network server authenticates with this token; restart it so the old
+    // token stops working immediately.
+    network.apply_settings(&app, &settings)?;
     emit_settings_changed(&app, "mcp_token_regenerated")?;
     Ok(settings)
 }
@@ -1037,6 +1044,132 @@ pub fn stop_agent_session(
     })
 }
 
+/// IPv4 addresses another device can use to reach this machine's network
+/// server: the primary outbound IP first, then other private-LAN and
+/// Tailscale (CGNAT 100.64/10) addresses. The settings dialog composes these
+/// with the configured port into connect URLs.
+pub fn network_server_addresses_list() -> Vec<String> {
+    use std::net::IpAddr;
+
+    let mut addresses: Vec<String> = Vec::new();
+    // The default-route IP (what `local_ip` resolves) is the address most
+    // likely to be the real LAN adapter rather than a VM/WSL bridge.
+    if let Ok(IpAddr::V4(primary)) = local_ip_address::local_ip() {
+        addresses.push(primary.to_string());
+    }
+    if let Ok(interfaces) = local_ip_address::list_afinet_netifas() {
+        for (_name, address) in interfaces {
+            let IpAddr::V4(v4) = address else { continue };
+            let octets = v4.octets();
+            let tailscale = octets[0] == 100 && (64..128).contains(&octets[1]);
+            if v4.is_loopback() || v4.is_link_local() || (!v4.is_private() && !tailscale) {
+                continue;
+            }
+            let value = v4.to_string();
+            if !addresses.contains(&value) {
+                addresses.push(value);
+            }
+        }
+    }
+    addresses
+}
+
+#[tauri::command]
+pub fn network_server_addresses() -> Vec<String> {
+    network_server_addresses_list()
+}
+
+/// Command dispatch for the in-app network server's interactive plane (T-34):
+/// PTY terminals and terminal/agent lifecycle. These need this process's
+/// `PtyState` and `AppHandle`, so they cannot run in the headless server or
+/// the pure-DB dispatch table; the network server tries this hook first and
+/// falls back to the data-plane dispatch when it returns `None`.
+pub fn network_interactive_dispatch(
+    app: &AppHandle,
+    command: &str,
+    args: &Value,
+) -> Option<Result<Value, String>> {
+    fn arg_i64(args: &Value, key: &str) -> Result<i64, String> {
+        args.get(key)
+            .and_then(Value::as_i64)
+            .ok_or_else(|| format!("missing \"{key}\""))
+    }
+    fn arg_u16(args: &Value, key: &str) -> Result<u16, String> {
+        arg_i64(args, key)
+            .and_then(|value| u16::try_from(value).map_err(|_| format!("invalid \"{key}\"")))
+    }
+    fn arg_str<'a>(args: &'a Value, key: &str) -> Result<&'a str, String> {
+        args.get(key)
+            .and_then(Value::as_str)
+            .ok_or_else(|| format!("missing \"{key}\""))
+    }
+    fn command_input<T: serde::de::DeserializeOwned>(
+        command: &str,
+        args: &Value,
+    ) -> Result<T, String> {
+        serde_json::from_value(args.get("input").cloned().unwrap_or(Value::Null))
+            .map_err(|err| format!("invalid args for {command}: {err}"))
+    }
+    fn to_json<T: Serialize>(value: T) -> Result<Value, String> {
+        serde_json::to_value(value).map_err(|err| err.to_string())
+    }
+
+    let result = match command {
+        "network_server_addresses" => to_json(network_server_addresses_list()),
+        "pty_scrollback" => arg_i64(args, "id")
+            .and_then(|id| app.state::<PtyState>().scrollback(id))
+            .and_then(to_json),
+        // The Tauri `pty_write` sends raw bytes with headers; over HTTP the
+        // browser sends base64 JSON instead.
+        "pty_write" => (|| {
+            let id = arg_i64(args, "id")?;
+            let owner = arg_str(args, "owner")?;
+            let bytes = STANDARD
+                .decode(arg_str(args, "data")?)
+                .map_err(|err| format!("pty_write: invalid base64: {err}"))?;
+            app.state::<PtyState>().write_owned(id, owner, &bytes)?;
+            Ok(Value::Null)
+        })(),
+        "pty_resize" => (|| {
+            let id = arg_i64(args, "id")?;
+            app.state::<PtyState>()
+                .resize(id, arg_u16(args, "cols")?, arg_u16(args, "rows")?)?;
+            Ok(Value::Null)
+        })(),
+        "pty_claim_input" => (|| {
+            app.state::<PtyState>()
+                .claim_input(arg_i64(args, "id")?, arg_str(args, "owner")?)?;
+            Ok(Value::Null)
+        })(),
+        "pty_release_input" => (|| {
+            app.state::<PtyState>()
+                .release_input(arg_i64(args, "id")?, arg_str(args, "owner")?)?;
+            Ok(Value::Null)
+        })(),
+        "pty_close" => arg_i64(args, "id")
+            .and_then(|id| app.state::<PtyState>().close(id))
+            .map(|()| Value::Null),
+        "start_execution_terminal" => command_input(command, args).and_then(|input| {
+            start_execution_terminal(app.clone(), app.state(), app.state(), input).and_then(to_json)
+        }),
+        "close_execution_terminal" => command_input(command, args).and_then(|input| {
+            close_execution_terminal(app.clone(), app.state(), app.state(), input)
+                .map(|()| Value::Null)
+        }),
+        "rename_execution_terminal" => command_input(command, args).and_then(|input| {
+            rename_execution_terminal(app.clone(), app.state(), input).and_then(to_json)
+        }),
+        "start_agent_session" => command_input(command, args).and_then(|input| {
+            start_agent_session(app.clone(), app.state(), app.state(), input).and_then(to_json)
+        }),
+        "stop_agent_session" => command_input(command, args).and_then(|input| {
+            stop_agent_session(app.clone(), app.state(), app.state(), input).and_then(to_json)
+        }),
+        _ => return None,
+    };
+    Some(result)
+}
+
 #[tauri::command]
 pub fn save_editor_image(
     app: AppHandle,
@@ -1346,6 +1479,8 @@ pub fn update_app_settings_in_db(
         &input.markdown_editor_font_family,
         &input.markdown_editor_font_size,
         &input.markdown_editor_max_image_height,
+        input.network_server_enabled,
+        input.network_server_port,
     )
     .map_err(command_error)
 }
@@ -2901,46 +3036,12 @@ pub fn configured_project_folder_open_app(value: &str) -> Option<String> {
     }
 }
 
-pub fn build_folder_open_process_command(
-    folder_open_app: &str,
-    path: &str,
-    remote_host: Option<&str>,
-    remote_path: Option<&str>,
-) -> Result<ProcessCommandSpec, String> {
-    let program = required_command_text("folder open app", folder_open_app)?;
-    let path = required_command_text("folder path", path)?;
-    let mut args = Vec::new();
-    if let Some(remote_host) = remote_host {
-        let remote_host = required_command_text("remote host", remote_host)?;
-        let remote_path = required_command_text("remote path", remote_path.unwrap_or(&path))?;
-        args.push("--remote".to_string());
-        args.push(format!("ssh-remote+{remote_host}"));
-        args.push(remote_path);
-    } else {
-        args.push(path.to_string());
-    }
-
-    Ok(ProcessCommandSpec {
-        cwd: path.to_string(),
-        display: shell_join(&program, &args),
-        program,
-        args,
-    })
-}
-
 pub fn build_folder_open_command(
     folder_open_app: &str,
     path: &str,
-    remote_host: Option<&str>,
-    remote_path: Option<&str>,
 ) -> Result<FolderOpenCommandSpec, String> {
     let path = required_command_text("folder path", path)?;
-    if remote_host.is_some() {
-        return build_folder_open_process_command(folder_open_app, &path, remote_host, remote_path)
-            .map(FolderOpenCommandSpec::Process);
-    }
-
-    Ok(FolderOpenCommandSpec::System {
+    Ok(FolderOpenCommandSpec {
         path,
         app: configured_project_folder_open_app(folder_open_app),
     })
@@ -2950,27 +3051,15 @@ fn open_folder_with_app(
     app: &AppHandle,
     folder_open_app: &str,
     path: &Path,
-    remote_host: Option<&str>,
-    remote_path: Option<&str>,
 ) -> Result<(), String> {
     let path = path.display().to_string();
-    match build_folder_open_command(folder_open_app, &path, remote_host, remote_path)? {
-        FolderOpenCommandSpec::System {
-            path,
-            app: open_app,
-        } => {
-            app.opener()
-                .open_path(path, open_app)
-                .map_err(command_error)?;
-        }
-        FolderOpenCommandSpec::Process(process) => {
-            Command::new(&process.program)
-                .args(&process.args)
-                .current_dir(&process.cwd)
-                .spawn()
-                .map_err(command_error)?;
-        }
-    }
+    let FolderOpenCommandSpec {
+        path,
+        app: open_app,
+    } = build_folder_open_command(folder_open_app, &path)?;
+    app.opener()
+        .open_path(path, open_app)
+        .map_err(command_error)?;
     Ok(())
 }
 
@@ -2995,12 +3084,11 @@ mod tests {
 
     #[test]
     fn folder_open_command_uses_system_opener_for_local_project_app() {
-        let command =
-            build_folder_open_command("Cursor", "/Users/markcl/p/local", None, None).unwrap();
+        let command = build_folder_open_command("Cursor", "/Users/markcl/p/local").unwrap();
 
         assert_eq!(
             command,
-            FolderOpenCommandSpec::System {
+            FolderOpenCommandSpec {
                 path: "/Users/markcl/p/local".to_string(),
                 app: Some("Cursor".to_string()),
             }

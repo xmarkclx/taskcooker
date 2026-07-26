@@ -593,6 +593,62 @@ impl PtyState {
         })
     }
 
+    /// Owner-checked write used by `pty_write` and the network bridge: only
+    /// the terminal view holding focused input may write.
+    pub fn write_owned(&self, id: i64, input_owner: &str, bytes: &[u8]) -> Result<(), String> {
+        let session = self.session(id)?;
+        if !session.input_owner.can_write(input_owner)? {
+            return Err("pty_write: terminal view does not own focused input".to_string());
+        }
+        // Bind before returning: the writer guard borrows `session`, and a
+        // tail-expression temporary would outlive it.
+        let result = session
+            .writer
+            .lock()
+            .map_err(|_| "pty writer lock is poisoned".to_string())?
+            .write_all(bytes)
+            .map_err(|err| err.to_string());
+        result
+    }
+
+    pub fn claim_input(&self, id: i64, owner: &str) -> Result<(), String> {
+        self.session(id)?.input_owner.claim(owner)
+    }
+
+    pub fn release_input(&self, id: i64, owner: &str) -> Result<(), String> {
+        self.session(id)?.input_owner.release(owner)
+    }
+
+    pub fn resize(&self, id: i64, cols: u16, rows: u16) -> Result<(), String> {
+        let session = self.session(id)?;
+        let mut current_size = session
+            .size
+            .lock()
+            .map_err(|_| "pty size lock is poisoned".to_string())?;
+        if pty_grid_matches(&current_size, cols, rows) {
+            return Ok(());
+        }
+
+        session
+            .master
+            .lock()
+            .map_err(|_| "pty master lock is poisoned".to_string())?
+            .resize(PtySize {
+                rows,
+                cols,
+                pixel_width: 0,
+                pixel_height: 0,
+            })
+            .map_err(|err| err.to_string())?;
+        *current_size = PtySize {
+            rows,
+            cols,
+            pixel_width: 0,
+            pixel_height: 0,
+        };
+        Ok(())
+    }
+
     pub fn write_text(&self, id: i64, text: &str) -> Result<(), String> {
         let session = self.session(id)?;
         let result = session
@@ -1153,58 +1209,22 @@ pub fn pty_write(state: State<'_, PtyState>, request: Request) -> Result<(), Str
     let InvokeBody::Raw(bytes) = request.body() else {
         return Err("pty_write: expected raw body".to_string());
     };
-    let session = state.session(id)?;
-    if !session.input_owner.can_write(input_owner)? {
-        return Err("pty_write: terminal view does not own focused input".to_string());
-    }
-    let result = session
-        .writer
-        .lock()
-        .map_err(|_| "pty writer lock is poisoned".to_string())?
-        .write_all(bytes)
-        .map_err(|err| err.to_string());
-    result
+    state.write_owned(id, input_owner, bytes)
 }
 
 #[tauri::command]
 pub fn pty_claim_input(state: State<'_, PtyState>, id: i64, owner: String) -> Result<(), String> {
-    state.session(id)?.input_owner.claim(&owner)
+    state.claim_input(id, &owner)
 }
 
 #[tauri::command]
 pub fn pty_release_input(state: State<'_, PtyState>, id: i64, owner: String) -> Result<(), String> {
-    state.session(id)?.input_owner.release(&owner)
+    state.release_input(id, &owner)
 }
 
 #[tauri::command]
 pub fn pty_resize(state: State<'_, PtyState>, id: i64, cols: u16, rows: u16) -> Result<(), String> {
-    let session = state.session(id)?;
-    let mut current_size = session
-        .size
-        .lock()
-        .map_err(|_| "pty size lock is poisoned".to_string())?;
-    if pty_grid_matches(&current_size, cols, rows) {
-        return Ok(());
-    }
-
-    session
-        .master
-        .lock()
-        .map_err(|_| "pty master lock is poisoned".to_string())?
-        .resize(PtySize {
-            rows,
-            cols,
-            pixel_width: 0,
-            pixel_height: 0,
-        })
-        .map_err(|err| err.to_string())?;
-    *current_size = PtySize {
-        rows,
-        cols,
-        pixel_width: 0,
-        pixel_height: 0,
-    };
-    Ok(())
+    state.resize(id, cols, rows)
 }
 
 // `async`: killing the shell's process group can block; keep it off the main

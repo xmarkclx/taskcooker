@@ -1,7 +1,7 @@
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use tauri::menu::{
-    AboutMetadata, Menu, MenuItem, PredefinedMenuItem, Submenu, HELP_SUBMENU_ID, WINDOW_SUBMENU_ID,
+    AboutMetadata, Menu, PredefinedMenuItem, Submenu, HELP_SUBMENU_ID, WINDOW_SUBMENU_ID,
 };
 use tauri::utils::config::Color;
 use tauri::webview::{NewWindowFeatures, NewWindowResponse};
@@ -9,8 +9,6 @@ use tauri::{App, AppHandle, Manager, Runtime, Url, WebviewUrl, WebviewWindowBuil
 
 static IMAGE_WINDOW_COUNTER: AtomicU64 = AtomicU64::new(1);
 static TASK_WINDOW_COUNTER: AtomicU64 = AtomicU64::new(1);
-
-pub const CONNECT_REMOTE_MENU_ID: &str = "taskcooker-connect-remote";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MacosWindowMenuEntry {
@@ -104,14 +102,6 @@ fn create_macos_app_menu<R: Runtime>(app_handle: &AppHandle<R>) -> tauri::Result
             &PredefinedMenuItem::quit(app_handle, None)?,
         ],
     )?;
-    let connect_remote = MenuItem::with_id(
-        app_handle,
-        CONNECT_REMOTE_MENU_ID,
-        "Connect to...",
-        true,
-        None::<&str>,
-    )?;
-    let file_menu = Submenu::with_items(app_handle, "File", true, &[&connect_remote])?;
     let edit_menu = Submenu::with_items(
         app_handle,
         "Edit",
@@ -151,7 +141,6 @@ fn create_macos_app_menu<R: Runtime>(app_handle: &AppHandle<R>) -> tauri::Result
         app_handle,
         &[
             &app_menu,
-            &file_menu,
             &edit_menu,
             &view_menu,
             &window_menu,

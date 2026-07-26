@@ -23,11 +23,22 @@ pub fn get_project_git_repository(
     state: State<'_, AppDb>,
     input: ProjectGitRepositoryCommand,
 ) -> Result<Option<ProjectGitRepositorySummary>, String> {
-    project_git_repository(&state, input.project_id).map_err(command_error)
+    get_project_git_repository_from_db(&state, input)
+}
+
+pub fn get_project_git_repository_from_db(
+    db: &AppDb,
+    input: ProjectGitRepositoryCommand,
+) -> Result<Option<ProjectGitRepositorySummary>, String> {
+    project_git_repository(db, input.project_id).map_err(command_error)
 }
 
 #[tauri::command]
 pub fn list_project_github_owners() -> Result<Vec<String>, String> {
+    list_project_github_owners_from_host()
+}
+
+pub fn list_project_github_owners_from_host() -> Result<Vec<String>, String> {
     github_owner_options().map_err(command_error)
 }
 
